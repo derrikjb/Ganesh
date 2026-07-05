@@ -1,0 +1,5 @@
+#!/bin/sh
+# Placeholder sidecar stub. Replaced by PyInstaller build (backend/pyinstaller.spec).
+# In dev, main.rs falls back to `python3 backend/main.py` when this binary is absent
+# from the exe dir; this stub exists only to satisfy tauri-build's externalBin check.
+echo "PORT: 0"
