@@ -375,3 +375,8 @@
 - Frontend test gotcha: when rendering ProviderSettings with default provider 'openai', the useEffect fires `loadModels('openai')` which consumes a mock. Local-provider tests must mock the initial models fetch too (`.mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))`) even though they immediately switch to 'local'.
 - No new native deps — `httpx` was already a runtime dependency, `litellm` already in NATIVE_DEPS. No NATIVE_DEPS.md update needed.
 - Tests: 9 in `tests/test_local_llm.py` (3 required + 6 coverage). Full backend suite: 122 passing. Frontend: 10 in ProviderSettings.test.tsx (3 new local tests). tsc clean.
+## Git Master Learnings
+- Always check if files are already tracked before assuming they are ignored.
+- Use `git add -f` if a file is explicitly ignored but needs to be tracked.
+- Fix `.gitignore` patterns to be more standard (e.g., `.sisyphus/*` instead of `.sisyphus/` if you want to unignore subdirectories).
+- Conventional Commits style detection is crucial for maintaining repo consistency.
