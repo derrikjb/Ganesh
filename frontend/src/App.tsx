@@ -4,6 +4,7 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { AccessibilityProvider } from './contexts/AccessibilityContext'
 import { ChatContainer } from './components/ChatContainer'
 import { ConversationHistory } from './components/ConversationHistory'
+import { WelcomeBanner } from './components/WelcomeBanner'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { AccessibilitySettings } from './components/AccessibilitySettings'
 import type { ConversationDetail } from './types/conversations'
@@ -42,6 +43,7 @@ function AppContent() {
           </button>
           <h1 className="text-2xl font-semibold tracking-tight">Ganesh</h1>
         </div>
+        <WelcomeBanner />
         <div className="flex items-center gap-4">
           <span className={`text-sm ${statusColor}`}>{statusText}</span>
           <button
@@ -87,6 +89,7 @@ function AppContent() {
         )}
 
         <main className="flex-1 flex flex-col overflow-hidden">
+          <WelcomeBanner />
           <ChatContainer documents={[]} onOpenDocument={() => {}} />
         </main>
 
