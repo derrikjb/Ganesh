@@ -497,3 +497,27 @@
 - **Duplicate import gotcha**: when adding `WelcomeBanner` import to `App.tsx`, the edit tool added it twice (once before ThemeSwitcher, once after AccessibilitySettings). tsc caught it as `TS2300: Duplicate identifier`. Always verify imports after edit.
 - No new native deps — SQLite is stdlib. No NATIVE_DEPS.md update needed.
 - Tests: 7 backend (`test_continuity.py`), 5 frontend (`WelcomeBanner.test.tsx`). Full suite: 133 backend + 181 frontend passing. tsc clean.
+
+## Task 34 — Emotional Context Awareness (Tone Detection + Personality Adjustment)
+
+### What was built
+- `backend/ganesh_backend/services/emotion.py`: `EmotionAnalyzer` class using VADER (vaderSentiment, pure Python) + rule-based keyword boosters to classify frustration/excitement/sadness/neutral from last 3 user messages.
+- `backend/ganesh_backend/routers/emotion.py`: `/api/emotion/supported`, `/api/emotion/analyze`, `/api/emotion/shift` endpoints.
+- `PersonalityEngine.apply_emotion_shifts(deltas, confidence)`: scales deltas by confidence, clamps to ±MUTATION_RATE_CAP, skips locked traits.
+- `backend/tests/test_emotion.py`: 14 tests (5 required + 9 bonus).
+- vaderSentiment added to pyproject.toml, NATIVE_DEPS, pyinstaller.spec (collect_all for lexicon data), NATIVE_DEPS.md.
+
+### Key decisions
+- **VADER over nltk**: vaderSentiment is a standalone pure-Python package (125KB), no nltk data download needed. Import: `from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer`.
+- **Confidence formula**: `0.4 + polarity_weight * 0.4 + keyword_boost` where keyword_boost = min(0.4, token_count * 0.15). Threshold 0.6 — below it, emotion is reported as neutral with empty deltas.
+- **Deltas scaled by confidence**: `apply_emotion_shifts` multiplies each delta by confidence (clamped [0,1]) before applying, so weak signals produce proportionally smaller nudges.
+- **No persistent emotional state**: analyzer is stateless; each request re-analyzes the message window.
+
+### Gotcha fixed
+- **VADER singleton bug**: `_get_vader()` had `if _Vader is None and _Vader is not None` — checked the class instead of the instance, so VADER was never instantiated and compound was always 0.0. Fixed to `if _vader_instance is None and _Vader is not None`.
+
+### Test results
+- 153 tests pass (up from 139 — 14 new emotion tests).
+- `--check-imports` passes (vaderSentiment in NATIVE_DEPS).
+- ruff clean on all changed files.
+- mypy clean on emotion.py/router.py (pre-existing config.py errors unchanged).

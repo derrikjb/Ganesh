@@ -273,6 +273,29 @@ class PersonalityEngine:
             self._current[trait] = new_value
         return dict(self._current)
 
+    def apply_emotion_shifts(
+        self,
+        deltas: Mapping[str, float],
+        confidence: float = 1.0,
+    ) -> dict[str, float]:
+        """Apply emotion-derived trait deltas, respecting locks + mutation cap.
+
+        Used by the emotion-awareness layer (Task 34). ``deltas`` are the
+        raw per-trait shifts (e.g. ``{"verbosity": -0.10}``); they are scaled
+        by ``confidence`` (clamped to [0, 1]) and then clamped to
+        ``±MUTATION_RATE_CAP`` before being added to the current trait value.
+        Locked traits are skipped entirely. No state is persisted.
+        """
+        conf = clamp(float(confidence), 0.0, 1.0)
+        for trait, raw_delta in deltas.items():
+            if trait not in TRAIT_BOUNDS or trait in self._locked:
+                continue
+            scaled = float(raw_delta) * conf
+            capped_delta = clamp(scaled, -MUTATION_RATE_CAP, MUTATION_RATE_CAP)
+            current = self._current[trait]
+            self._current[trait] = _clamp_trait(trait, current + capped_delta)
+        return dict(self._current)
+
     # ---- system prompt ----------------------------------------------------
 
     def get_system_prompt(self) -> str:

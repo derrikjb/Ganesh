@@ -16,6 +16,7 @@ and their handling in the PyInstaller frozen binary (`backend/pyinstaller.spec`)
 | `pyyaml` | No | `yaml` | Pure Python | Note: import name is `yaml`, not `pyyaml` |
 | `piper-tts` | Yes (ONNX Runtime, C++) | `piper` | `collect_all("piper")` + `collect_dynamic_libs("onnxruntime")` | Note: package name is `piper-tts`, import name is `piper`. ONNX Runtime ships native shared libs. |
 | `faster-whisper` | Yes (C++) | `faster_whisper` | `collect_all("faster_whisper")` + `collect_dynamic_libs("ctranslate2")` | CTranslate2 native runtime; pulls onnxruntime + av (PyAV) as transitive native deps |
+| `vaderSentiment` | No | `vaderSentiment` | Pure Python | Lexicon + rule-based sentiment for emotion detection (Task 34). Package and import name both `vaderSentiment`. |
 
 ## `--check-imports` Verification
 

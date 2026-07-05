@@ -87,6 +87,14 @@ binaries += collect_dynamic_libs("ctranslate2")
 binaries += collect_dynamic_libs("onnxruntime")
 binaries += collect_dynamic_libs("av")
 
+# vaderSentiment (pure-Python lexicon sentiment for emotion detection, Task 34).
+# Pure Python — collect_all pulls its lexicon data files so the frozen binary
+# can load the VADER lexicon at runtime.
+_tmp_datas, _tmp_bins, _tmp_hidden = collect_all("vaderSentiment")
+datas += _tmp_datas
+binaries += _tmp_bins
+hiddenimports += _tmp_hidden
+
 a = Analysis(
     ["main.py"],
     pathex=[_backend_root],
