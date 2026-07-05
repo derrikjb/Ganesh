@@ -124,6 +124,9 @@ class LanceDbVectorStore(VectorStoreBase):
     ) -> list[OutputData]:
         table = self._ensure_table()
         query_vec = [float(v) for v in vectors]
+        # NOTE: ``filters`` is accepted for API compatibility but not applied
+        # here — LanceDB's json_extract requires a binary payload column.
+        # Callers filter results in Python instead.
         results = table.search(query_vec).metric(self._distance).limit(top_k).to_list()
         import json
 
@@ -134,9 +137,19 @@ class LanceDbVectorStore(VectorStoreBase):
                 payload = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
             except (json.JSONDecodeError, TypeError):
                 payload = {}
+            if filters:
+                matched = True
+                for key, value in filters.items():
+                    if payload.get(key) != value:
+                        matched = False
+                        break
+                if not matched:
+                    continue
             distance_val = row.get("_distance", 0.0)
             score = max(0.0, 1.0 - distance_val)
             out.append(OutputData(id=str(row["id"]), score=score, payload=payload))
+            if len(out) >= top_k:
+                break
         return out
 
     def delete(self, vector_id: str) -> None:
@@ -193,14 +206,6 @@ class LanceDbVectorStore(VectorStoreBase):
     ) -> list[OutputData]:
         table = self._ensure_table()
         query = table.search()
-        if filters:
-            clauses = []
-            for key, value in filters.items():
-                clauses.append(f'json_extract(payload, "$.{key}") = \'{value}\'')
-            if clauses:
-                query = query.where(" AND ".join(clauses))
-        if top_k:
-            query = query.limit(top_k)
         rows = query.to_list()
         import json
 
@@ -211,7 +216,17 @@ class LanceDbVectorStore(VectorStoreBase):
                 payload = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
             except (json.JSONDecodeError, TypeError):
                 payload = {}
+            if filters:
+                matched = True
+                for key, value in filters.items():
+                    if payload.get(key) != value:
+                        matched = False
+                        break
+                if not matched:
+                    continue
             out.append(OutputData(id=str(row["id"]), score=1.0, payload=payload))
+        if top_k:
+            out = out[:top_k]
         return out
 
     def reset(self) -> None:

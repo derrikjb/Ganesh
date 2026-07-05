@@ -2,11 +2,15 @@
 
 Endpoints
 ---------
-POST   /api/memory          — store a memory
+POST   /api/memory          — store a memory (scoped to active profile)
 GET    /api/memory          — retrieve memories (semantic search via ?query=)
-GET    /api/memory/list     — list all memories
+GET    /api/memory/list     — list all memories for the active profile
 PUT    /api/memory/{id}     — update a memory
 DELETE /api/memory/{id}     — delete a memory
+
+All operations are scoped by ``profile_id``. The active profile is read from
+the :class:`ProfileManager` singleton; callers may override it with the
+``profile_id`` query parameter.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from ganesh_backend.embeddings import HashEmbedder, create_default_embedder
+from ganesh_backend.embeddings import create_default_embedder
 from ganesh_backend.services.memory import MemoryService
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
@@ -53,6 +57,28 @@ def reset_memory_service() -> None:
     _service = None
 
 
+def set_memory_service(svc: MemoryService) -> None:
+    global _service
+    _service = svc
+
+
+def _resolve_profile_id(explicit: Optional[str]) -> Optional[str]:
+    """Return the profile_id to scope by.
+
+    If ``explicit`` is provided, use it. Otherwise fall back to the active
+    profile from the profile manager. Returns ``None`` if no profile manager
+    is available (e.g. when the memory router is used standalone in tests).
+    """
+    if explicit is not None:
+        return explicit
+    try:
+        from ganesh_backend.services.profiles import get_profile_manager
+        mgr = get_profile_manager()
+        return mgr.get_active_profile_id()
+    except Exception:
+        return None
+
+
 class StoreMemoryRequest(BaseModel):
     content: str = Field(..., min_length=1)
     metadata: Optional[dict[str, Any]] = None
@@ -81,9 +107,15 @@ class ListResponse(BaseModel):
 
 
 @router.post("", response_model=MemoryResponse, status_code=201)
-async def store_memory(req: StoreMemoryRequest) -> MemoryResponse:
+async def store_memory(
+    req: StoreMemoryRequest,
+    profile_id: Optional[str] = Query(None),
+) -> MemoryResponse:
     service = get_memory_service()
-    record = service.store_memory(content=req.content, metadata=req.metadata)
+    pid = _resolve_profile_id(profile_id)
+    record = service.store_memory(
+        content=req.content, metadata=req.metadata, profile_id=pid
+    )
     return MemoryResponse(**record.to_dict())
 
 
@@ -91,9 +123,11 @@ async def store_memory(req: StoreMemoryRequest) -> MemoryResponse:
 async def retrieve_memories(
     query: str = Query(..., min_length=1),
     limit: int = Query(5, ge=1, le=100),
+    profile_id: Optional[str] = Query(None),
 ) -> RetrieveResponse:
     service = get_memory_service()
-    records = service.retrieve_memories(query=query, limit=limit)
+    pid = _resolve_profile_id(profile_id)
+    records = service.retrieve_memories(query=query, limit=limit, profile_id=pid)
     return RetrieveResponse(
         query=query,
         results=[MemoryResponse(**r.to_dict()) for r in records],
@@ -101,24 +135,38 @@ async def retrieve_memories(
 
 
 @router.get("/list", response_model=ListResponse)
-async def list_memories() -> ListResponse:
+async def list_memories(
+    profile_id: Optional[str] = Query(None),
+) -> ListResponse:
     service = get_memory_service()
-    records = service.list_memories()
+    pid = _resolve_profile_id(profile_id)
+    records = service.list_memories(profile_id=pid)
     return ListResponse(memories=[MemoryResponse(**r.to_dict()) for r in records])
 
 
 @router.put("/{memory_id}", response_model=MemoryResponse)
-async def update_memory(memory_id: str, req: UpdateMemoryRequest) -> MemoryResponse:
+async def update_memory(
+    memory_id: str,
+    req: UpdateMemoryRequest,
+    profile_id: Optional[str] = Query(None),
+) -> MemoryResponse:
     service = get_memory_service()
-    record = service.update_memory(memory_id, content=req.content, metadata=req.metadata)
+    pid = _resolve_profile_id(profile_id)
+    record = service.update_memory(
+        memory_id, content=req.content, metadata=req.metadata, profile_id=pid
+    )
     if record is None:
         raise HTTPException(status_code=404, detail=f"Memory {memory_id} not found")
     return MemoryResponse(**record.to_dict())
 
 
 @router.delete("/{memory_id}", status_code=204)
-async def delete_memory(memory_id: str) -> None:
+async def delete_memory(
+    memory_id: str,
+    profile_id: Optional[str] = Query(None),
+) -> None:
     service = get_memory_service()
-    deleted = service.delete_memory(memory_id)
+    pid = _resolve_profile_id(profile_id)
+    deleted = service.delete_memory(memory_id, profile_id=pid)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Memory {memory_id} not found")
