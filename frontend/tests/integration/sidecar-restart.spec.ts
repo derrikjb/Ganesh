@@ -30,7 +30,7 @@ test.describe('sidecar restart', () => {
     await sidecar.kill()
 
     await expect(page.getByText(/Connecting/)).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText(/Waiting for sidecar/)).toBeVisible()
+    await expect(page.getByText(/Welcome to Ganesh/)).toBeVisible()
   })
 
   test('frontend reconnects when sidecar comes back', async ({ page }) => {

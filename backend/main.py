@@ -21,6 +21,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ganesh_backend.routers import memory as memory_router
+
 from ganesh_backend.routers import files as files_router
 
 from ganesh_backend.routers import search as search_router
@@ -49,6 +51,8 @@ NATIVE_DEPS: tuple[str, ...] = (
     "litellm",
     "keyring",
     "yaml",  # PyYAML exposes the `yaml` module, not `pyyaml`
+    "lancedb",
+    "mem0",
 )
 
 # A threading.Event coordinates shutdown between the /shutdown endpoint and the
@@ -75,6 +79,8 @@ def create_app() -> FastAPI:
 
     app.include_router(search_router.router)
 
+    app.include_router(files_router.router)
+
     app.include_router(chat_router.router, prefix="/api")
 
     @app.get("/health")
@@ -90,7 +96,8 @@ def create_app() -> FastAPI:
         threading.Thread(target=_trigger_shutdown, daemon=True).start()
         return {"status": "shutting down"}
 
-    app.include_router(files_router.router)
+    app.include_router(memory_router.router)
+
     return app
 
 

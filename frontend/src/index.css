@@ -13,3 +13,45 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+.chat-code-block {
+  display: block;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  margin: var(--spacing-sm) 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--text-size-sm);
+  overflow-x: auto;
+}
+
+.chat-inline-code {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  font-family: var(--font-family-mono);
+  font-size: 0.875em;
+}
+
+.chat-code-block {
+  display: block;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  margin: var(--spacing-sm) 0;
+  font-family: var(--font-family-mono);
+  font-size: var(--text-size-sm);
+  overflow-x: auto;
+}
+
+.chat-inline-code {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  font-family: var(--font-family-mono);
+  font-size: 0.875em;
+}

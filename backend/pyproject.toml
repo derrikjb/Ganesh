@@ -10,7 +10,8 @@ dependencies = [
     "keyring",
     "pyyaml",
     "python-multipart",
-    "httpx",
+    "lancedb",
+    "mem0ai",
 ]
 
 [project.optional-dependencies]
@@ -20,6 +21,9 @@ dev = [
     "mypy",
     "ruff",
     "httpx",
+]
+prod = [
+    "sentence-transformers",
 ]
 
 [tool.ruff]

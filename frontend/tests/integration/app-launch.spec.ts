@@ -34,6 +34,6 @@ test.describe('app launch', () => {
 
     await expect(page.getByText(/Connected/)).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText(`127.0.0.1:${SIDECAR_PORT}`)).toBeVisible()
-    await expect(page.getByText('Sidecar ready.')).toBeVisible()
+    await expect(page.getByText('Welcome to Ganesh')).toBeVisible()
   })
 })

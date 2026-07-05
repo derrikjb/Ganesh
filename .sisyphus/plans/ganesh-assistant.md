@@ -372,7 +372,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 1. Repo Scaffold + Directory Structure + Git Init + License
+- [x] 1. Repo Scaffold + Directory Structure + Git Init + License
 
   **What to do**:
   - Run preflight (Task 0) first — abort if it fails
@@ -518,7 +518,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 2. GitHub Actions CI Matrix (Windows + Linux)
+- [x] 2. GitHub Actions CI Matrix (Windows + Linux)
 
   **What to do**:
   - Create `.github/workflows/ci.yml` with matrix strategy:
@@ -578,7 +578,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 3. Python FastAPI Sidecar + /health Endpoint + PyInstaller Spec
+- [x] 3. Python FastAPI Sidecar + /health Endpoint + PyInstaller Spec
 
   **What to do**:
   - Create `backend/main.py` with FastAPI app:
@@ -696,7 +696,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 4. Tauri v2 Shell + React/TS Frontend Scaffold + Sidecar Lifecycle
+- [x] 4. Tauri v2 Shell + React/TS Frontend Scaffold + Sidecar Lifecycle
 
   **What to do**:
   - Configure `src-tauri/tauri.conf.json`:
@@ -803,7 +803,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 5. Playwright Integration Test Layer (Real App + Stub LLM)
+- [x] 5. Playwright Integration Test Layer (Real App + Stub LLM)
 
   **What to do**:
   - Set up Playwright with Tauri WebDriver for integration testing:
@@ -879,7 +879,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 6. NATIVE_DEPS.md Registry + Frozen Binary Native Dep CI Check
+- [x] 6. NATIVE_DEPS.md Registry + Frozen Binary Native Dep CI Check
 
   **What to do**:
   - Populate `docs/NATIVE_DEPS.md` with initial registry of native Python deps:
@@ -950,7 +950,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 7. Design System Tokens + Dark Theme Foundation
+- [x] 7. Design System Tokens + Dark Theme Foundation
 
   **What to do**:
   - Create `frontend/src/styles/tokens.css` with CSS custom properties: colors (`--bg-primary` #0a0a0a, `--bg-secondary` #1a1a1a, `--text-primary` #e0e0e0, `--accent` #3b82f6, `--border` #333), spacing (`--space-xs` 4px through `--space-xl` 32px), typography (font stacks, text sizes), radius, transitions
@@ -993,7 +993,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 8. FastAPI Chat Endpoint + LiteLLM (OpenAI) + Streaming
+- [x] 8. FastAPI Chat Endpoint + LiteLLM (OpenAI) + Streaming
 
   **What to do**:
   - Create `backend/chat.py`: `POST /chat` accepting `{message, conversation_id}`, using LiteLLM with OpenAI provider (default `gpt-4o-mini`), streaming via SSE
@@ -1049,7 +1049,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 9. React Chat UI (Message List, Input, Streaming Display, Drag-Drop)
+- [x] 9. React Chat UI (Message List, Input, Streaming Display, Drag-Drop)
 
   **What to do**:
   - Create `frontend/src/components/chat/`: `ChatWindow.tsx` (message list + auto-scroll), `Message.tsx` (user vs assistant styling, markdown rendering via react-markdown), `ChatInput.tsx` (text input, Enter to send, Shift+Enter newline), `TypingIndicator.tsx`, `DragDropZone.tsx` (drag-drop file area + preview + upload)
@@ -1109,7 +1109,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 10. mem0 OSS + LanceDB Memory Layer (Store/Retrieve/Update/Delete)
+- [x] 10. mem0 OSS + LanceDB Memory Layer (Store/Retrieve/Update/Delete)
 
   **What to do**:
   - Create `backend/memory.py`: Initialize mem0 OSS with LanceDB backend (stored in `~/.ganesh/data/lancedb/`), local embeddings via Ollama (`nomic-embed-text`) with sentence-transformers fallback
@@ -1191,7 +1191,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 11. File System Browsing Tool (List, Read, Navigate Directories)
+- [x] 11. File System Browsing Tool (List, Read, Navigate Directories)
 
   **What to do**:
   - Create `backend/tools/filesystem.py`: `POST /tools/filesystem/list` (list dir contents with name/type/size/modified), `POST /tools/filesystem/read` (read file with max_bytes truncation), `GET /tools/filesystem/home` (user home dir)
@@ -1239,7 +1239,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 12. Web Search Tool (Search API + Result Parsing)
+- [x] 12. Web Search Tool (Search API + Result Parsing)
 
   **What to do**:
   - Create `backend/tools/websearch.py`: `POST /tools/websearch` (search via duckduckgo-search, no API key needed, returns title/url/snippet), `POST /tools/websearch/fetch` (fetch URL, extract content via trafilatura)
@@ -1278,7 +1278,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 13. Config System (YAML Settings + JSON) + OS Keyring for API Keys
+- [x] 13. Config System (YAML Settings + JSON) + OS Keyring for API Keys
 
   **What to do**:
   - Create `backend/config.py`: Load `~/.ganesh/config.yaml` (create default if not exists), pydantic schema with ALL config fields used across the project:
@@ -1364,7 +1364,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 14. Single-Instance Lock + System Tray + Global Hotkey
+- [x] 14. Single-Instance Lock + System Tray + Global Hotkey
 
   **What to do**:
   - System tray (Tauri core feature, NOT a plugin — enable via `features = ["tray-icon"]` on the `tauri` crate, already done in Task 4):

@@ -1,0 +1,29 @@
+export type MessageRole = 'user' | 'assistant' | 'system'
+
+export type MessageStatus = 'sending' | 'sent' | 'error' | 'done'
+
+export interface ChatMessage {
+  id: string
+  role: MessageRole
+  content: string
+  timestamp: Date
+  status: MessageStatus
+  attachedFiles?: AttachedFile[]
+}
+
+export interface AttachedFile {
+  name: string
+  type: string
+  size: number
+  preview?: string // data URL for images
+}
+
+export interface UseChatReturn {
+  messages: ChatMessage[]
+  isStreaming: boolean
+  streamingContent: string
+  error: string | null
+  sendMessage: (text: string, files?: AttachedFile[]) => Promise<void>
+  retryLast: () => Promise<void>
+  clearMessages: () => void
+}

@@ -1,5 +1,6 @@
 import { useSidecar } from './useSidecar'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { ChatContainer } from './components/ChatContainer'
 
 function AppContent() {
   const { sidecarUrl, isReady, attempts } = useSidecar()
@@ -17,15 +18,8 @@ function AppContent() {
         <span className={`text-sm ${statusColor}`}>{statusText}</span>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-6 py-8">
-        {isReady ? (
-          <p className="text-text-secondary">Sidecar ready.</p>
-        ) : (
-          <div className="flex flex-col items-center gap-3 text-text-muted">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border-subtle border-t-text-primary" />
-            <p className="text-sm">Waiting for sidecar…</p>
-          </div>
-        )}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <ChatContainer />
       </main>
 
       <footer className="px-6 py-3 border-t border-border text-xs text-text-muted">
