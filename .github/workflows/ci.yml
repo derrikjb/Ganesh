@@ -73,3 +73,10 @@ jobs:
         run: |
           cd src-tauri
           cargo check
+
+      - name: Build and Check Frozen Binary
+        run: |
+          cd backend
+          pip install pyinstaller
+          pyinstaller --onefile main.py --name ganesh-backend
+          ./dist/ganesh-backend --check-imports
