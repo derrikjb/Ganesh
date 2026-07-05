@@ -11,14 +11,61 @@ function formatTime(date: Date): Date {
   return new Date(date)
 }
 
+async function safeJson<T>(res: Response): Promise<T | null> {
+  try {
+    return (await res.json()) as T
+  } catch {
+    return null
+  }
+}
+
+async function ensureConversation(existingId: string | null): Promise<string | null> {
+  if (existingId) return existingId
+  try {
+    const res = await sidecarFetch('/api/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: null }),
+    })
+    if (!res.ok) return null
+    const data = await safeJson<{ id: string }>(res)
+    return data?.id ?? null
+  } catch {
+    return null
+  }
+}
+
+async function persistMessage(
+  conversationId: string | null,
+  role: string,
+  content: string,
+): Promise<void> {
+  if (!conversationId || !content) return
+  try {
+    await sidecarFetch(`/api/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, content }),
+    })
+  } catch {
+  }
+}
+
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const lastUserMessageRef = useRef<string | null>(null)
   const lastFilesRef = useRef<AttachedFile[] | undefined>(undefined)
+  const conversationIdRef = useRef<string | null>(null)
+
+  const updateConversationId = useCallback((id: string | null) => {
+    conversationIdRef.current = id
+    setConversationId(id)
+  }, [])
 
   const sendMessage = useCallback(async (text: string, files?: AttachedFile[]) => {
     setError(null)
@@ -52,6 +99,12 @@ export function useChat(): UseChatReturn {
       .filter((m) => m.role !== 'system')
       .map((m) => ({ role: m.role, content: m.content }))
     apiMessages.push({ role: 'user' as const, content: text })
+
+    const convId = await ensureConversation(conversationIdRef.current)
+    if (convId && convId !== conversationIdRef.current) {
+      updateConversationId(convId)
+    }
+    void persistMessage(convId, 'user', text)
 
     try {
       const controller = new AbortController()
@@ -116,6 +169,7 @@ export function useChat(): UseChatReturn {
               : m,
         ),
       )
+      void persistMessage(convId, 'assistant', accumulated)
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
 
@@ -134,7 +188,7 @@ export function useChat(): UseChatReturn {
       setStreamingContent('')
       abortRef.current = null
     }
-  }, [messages])
+  }, [messages, updateConversationId])
 
   const retryLast = useCallback(async () => {
     if (lastUserMessageRef.current) {
@@ -150,8 +204,37 @@ export function useChat(): UseChatReturn {
     setIsStreaming(false)
     lastUserMessageRef.current = null
     lastFilesRef.current = undefined
+    updateConversationId(null)
     abortRef.current?.abort()
-  }, [])
+  }, [updateConversationId])
 
-  return { messages, isStreaming, streamingContent, error, sendMessage, retryLast, clearMessages }
+  const loadConversation = useCallback(
+    (conv: { id: string; messages: Array<{ role: string; content: string }> }) => {
+      updateConversationId(conv.id)
+      const loaded: ChatMessage[] = conv.messages.map((m, i) => ({
+        id: `loaded-${conv.id}-${i}`,
+        role: m.role as ChatMessage['role'],
+        content: m.content,
+        timestamp: new Date(),
+        status: 'done' as MessageStatus,
+      }))
+      setMessages(loaded)
+      setError(null)
+      lastUserMessageRef.current = null
+      lastFilesRef.current = undefined
+    },
+    [updateConversationId],
+  )
+
+  return {
+    messages,
+    isStreaming,
+    streamingContent,
+    error,
+    conversationId,
+    sendMessage,
+    retryLast,
+    clearMessages,
+    loadConversation,
+  }
 }

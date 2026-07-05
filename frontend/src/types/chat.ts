@@ -23,7 +23,9 @@ export interface UseChatReturn {
   isStreaming: boolean
   streamingContent: string
   error: string | null
+  conversationId: string | null
   sendMessage: (text: string, files?: AttachedFile[]) => Promise<void>
   retryLast: () => Promise<void>
   clearMessages: () => void
+  loadConversation: (conv: { id: string; messages: Array<{ role: string; content: string }> }) => void
 }
