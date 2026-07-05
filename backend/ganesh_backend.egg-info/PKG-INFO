@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: ganesh-backend
+Version: 0.1.0
+Summary: Backend for Ganesh AI Assistant
+Requires-Dist: fastapi
+Requires-Dist: uvicorn[standard]
+Requires-Dist: litellm
+Requires-Dist: pydantic
+Requires-Dist: keyring
+Requires-Dist: pyyaml
+Requires-Dist: python-multipart
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-asyncio; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: httpx; extra == "dev"

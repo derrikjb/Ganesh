@@ -4,18 +4,21 @@ version = "0.1.0"
 description = "Backend for Ganesh AI Assistant"
 dependencies = [
     "fastapi",
-    "uvicorn",
+    "uvicorn[standard]",
     "litellm",
     "pydantic",
     "keyring",
     "pyyaml",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-asyncio",
     "mypy",
     "ruff",
+    "httpx",
 ]
 
 [tool.ruff]

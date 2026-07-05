@@ -26,7 +26,17 @@ src-tauri/binaries/
 # OS
 .DS_Store
 Thumbs.db
+*.swp
+*~
 
 # IDE
 .vscode/
 .idea/
+.project
+.settings/
+.classpath
+.factorypath
+.opencode/
+.sisyphus/
+! .sisyphus/plans/
+! .sisyphus/notepads/

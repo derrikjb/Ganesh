@@ -286,7 +286,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ## TODOs
 
-- [ ] 0. Environment Preflight + Toolchain Verification
+- [x] 0. Environment Preflight + Toolchain Verification
 
   **What to do**:
   - Create a preflight check script (`scripts/preflight.sh` for Linux, `scripts/preflight.ps1` for Windows) that verifies the build environment before any other task runs:

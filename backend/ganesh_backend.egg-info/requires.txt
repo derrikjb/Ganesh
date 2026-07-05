@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+litellm
+pydantic
+keyring
+pyyaml
+python-multipart
+
+[dev]
+pytest
+pytest-asyncio
+mypy
+ruff
+httpx
