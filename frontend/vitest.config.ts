@@ -10,5 +10,7 @@ export default defineConfig({
     poolOptions: {
       threads: { singleThread: true },
     },
+    include: ['src/**/*.test.{ts,tsx}'],
+    exclude: ['node_modules/', 'tests/integration/', 'tests/fixtures/'],
   },
 })
