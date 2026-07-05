@@ -30,11 +30,13 @@ from ganesh_backend.routers import models as models_router
 from ganesh_backend.routers import search as search_router
 
 from ganesh_backend.routers import chat as chat_router
+from ganesh_backend.routers import conversations as conversations_router
 from ganesh_backend.routers import plugins as plugins_router
 from ganesh_backend.routers import tasks as tasks_router
 from ganesh_backend.routers import agents as agents_router
 from ganesh_backend.routers import voice as voice_router
 from ganesh_backend.routers.config import router as config_router
+from ganesh_backend.routers.personality import router as personality_router
 
 # Tauri v2 webview origins. On Windows the webview uses https://tauri.localhost,
 # on Linux/macOS it uses tauri://localhost. Both must be allowed for CORS.
@@ -113,11 +115,15 @@ def create_app() -> FastAPI:
 
     app.include_router(memory_router.router)
 
+    app.include_router(conversations_router.router)
+
     app.include_router(tasks_router.router)
 
     app.include_router(agents_router.router)
 
     app.include_router(plugins_router.router)
+
+    app.include_router(personality_router)
 
     return app
 

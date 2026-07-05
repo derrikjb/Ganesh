@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { sidecarFetch } from '../api'
 
-export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter'
+export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'local'
 
 export interface ProviderInfo {
   name: ProviderName
@@ -17,7 +17,10 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
   anthropic: 'Anthropic',
   google: 'Google (Gemini)',
   openrouter: 'OpenRouter',
+  local: 'Local LLM',
 }
+
+const LOCAL_DEFAULT_BASE_URL = 'http://localhost:11434/v1'
 
 async function fetchProviders(): Promise<ProviderInfo[]> {
   const res = await sidecarFetch('/api/config/providers')
@@ -42,6 +45,15 @@ async function saveProviderKey(provider: ProviderName, apiKey: string): Promise<
   if (!res.ok) throw new Error(`Failed to save key: ${res.status}`)
 }
 
+async function saveLocalEndpoint(baseUrl: string, model: string): Promise<void> {
+  const res = await sidecarFetch('/api/config/providers/local/endpoint', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_url: baseUrl, model }),
+  })
+  if (!res.ok) throw new Error(`Failed to save local endpoint: ${res.status}`)
+}
+
 async function testProviderConnection(provider: ProviderName): Promise<boolean> {
   const res = await sidecarFetch(`/api/config/providers/${provider}/test`, {
     method: 'POST',
@@ -58,10 +70,14 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
+  const [localBaseUrl, setLocalBaseUrl] = useState(LOCAL_DEFAULT_BASE_URL)
+  const [localModel, setLocalModel] = useState('')
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<null | boolean>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const isLocal = selectedProvider === 'local'
 
   const loadProviders = useCallback(async () => {
     try {
@@ -75,8 +91,9 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   const loadModels = useCallback(async (provider: ProviderName) => {
     try {
       const list = await fetchModels(provider)
-      setModels(list)
-      if (list.length > 0) setSelectedModel(list[0])
+      setModels(list ?? [])
+      if (list && list.length > 0) setSelectedModel(list[0])
+      else setSelectedModel('')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -87,8 +104,13 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   }, [loadProviders])
 
   useEffect(() => {
-    void loadModels(selectedProvider)
-  }, [selectedProvider, loadModels])
+    if (!isLocal) {
+      void loadModels(selectedProvider)
+    } else {
+      setModels([])
+      setSelectedModel(localModel)
+    }
+  }, [selectedProvider, loadModels, isLocal, localModel])
 
   const handleProviderChange = (provider: string) => {
     setSelectedProvider(provider as ProviderName)
@@ -98,17 +120,24 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   }
 
   const handleTest = async () => {
-    if (!apiKey) {
-      setError('Enter an API key before testing.')
-      return
-    }
     setTesting(true)
     setTestResult(null)
     setError(null)
     try {
-      await saveProviderKey(selectedProvider, apiKey)
-      const ok = await testProviderConnection(selectedProvider)
-      setTestResult(ok)
+      if (isLocal) {
+        await saveLocalEndpoint(localBaseUrl, localModel)
+        const ok = await testProviderConnection(selectedProvider)
+        setTestResult(ok)
+      } else {
+        if (!apiKey) {
+          setError('Enter an API key before testing.')
+          setTesting(false)
+          return
+        }
+        await saveProviderKey(selectedProvider, apiKey)
+        const ok = await testProviderConnection(selectedProvider)
+        setTestResult(ok)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setTestResult(false)
@@ -118,22 +147,28 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   }
 
   const handleSave = async () => {
-    if (!apiKey) {
+    if (!isLocal && !apiKey) {
       setError('Enter an API key before saving.')
       return
     }
     setSaving(true)
     setError(null)
     try {
-      await saveProviderKey(selectedProvider, apiKey)
+      if (isLocal) {
+        await saveLocalEndpoint(localBaseUrl, localModel)
+      } else {
+        await saveProviderKey(selectedProvider, apiKey)
+      }
       await loadProviders()
-      setApiKey('')
+      if (!isLocal) setApiKey('')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
     }
   }
+
+  const canSaveOrTest = isLocal ? localBaseUrl.trim().length > 0 : apiKey.length > 0
 
   return (
     <div
@@ -184,55 +219,95 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
           </select>
         </div>
 
-        <div>
-          <label
-            htmlFor="model-select"
-            className="mb-1 block text-sm font-medium text-text-primary"
-          >
-            Model
-          </label>
-          <select
-            id="model-select"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
-            data-testid="model-select"
-          >
-            {models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label
-            htmlFor="api-key-input"
-            className="mb-1 block text-sm font-medium text-text-primary"
-          >
-            API Key
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="api-key-input"
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter API key"
-              className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
-              data-testid="api-key-input"
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey((s) => !s)}
-              className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
-              data-testid="api-key-toggle"
-            >
-              {showKey ? 'Hide' : 'Show'}
-            </button>
-          </div>
-        </div>
+        {isLocal ? (
+          <>
+            <div>
+              <label
+                htmlFor="local-base-url-input"
+                className="mb-1 block text-sm font-medium text-text-primary"
+              >
+                Base URL
+              </label>
+              <input
+                id="local-base-url-input"
+                type="text"
+                value={localBaseUrl}
+                onChange={(e) => setLocalBaseUrl(e.target.value)}
+                placeholder={LOCAL_DEFAULT_BASE_URL}
+                className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                data-testid="local-base-url-input"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="local-model-input"
+                className="mb-1 block text-sm font-medium text-text-primary"
+              >
+                Model
+              </label>
+              <input
+                id="local-model-input"
+                type="text"
+                value={localModel}
+                onChange={(e) => setLocalModel(e.target.value)}
+                placeholder="e.g. llama3.2"
+                className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                data-testid="local-model-input"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label
+                htmlFor="model-select"
+                className="mb-1 block text-sm font-medium text-text-primary"
+              >
+                Model
+              </label>
+              <select
+                id="model-select"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                data-testid="model-select"
+              >
+                {models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="api-key-input"
+                className="mb-1 block text-sm font-medium text-text-primary"
+              >
+                API Key
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="api-key-input"
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter API key"
+                  className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  data-testid="api-key-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((s) => !s)}
+                  className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
+                  data-testid="api-key-toggle"
+                >
+                  {showKey ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         {error && (
           <div
@@ -260,7 +335,7 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
           <button
             type="button"
             onClick={handleTest}
-            disabled={testing || !apiKey}
+            disabled={testing || !canSaveOrTest}
             className="rounded border border-border-primary px-4 py-2 text-sm text-text-primary hover:bg-bg-tertiary disabled:opacity-50"
             data-testid="test-connection-button"
           >
@@ -269,7 +344,7 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || !apiKey}
+            disabled={saving || !canSaveOrTest}
             className="rounded bg-accent px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
             data-testid="save-provider-button"
           >

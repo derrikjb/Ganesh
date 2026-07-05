@@ -5,7 +5,7 @@ import keyring
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-SUPPORTED_PROVIDERS = ("openai", "anthropic", "google", "openrouter")
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "google", "openrouter", "local")
 
 _PROVIDER_ENV_VAR = {
     "openai": "OPENAI_API_KEY",
@@ -27,6 +27,16 @@ DEFAULT_CONFIG = {
     "voice": {
         "stt_enabled": False,
         "tts_enabled": False,
+    },
+    "personality": {
+        "traits": {
+            "formality": 0.0,       # -1.0 (casual) to 1.0 (formal)
+            "verbosity": 0.0,       # -1.0 (concise) to 1.0 (verbose)
+            "warmth": 0.5,          # 0.0 (cold) to 1.0 (warm)
+            "humor": 0.3,           # 0.0 (serious) to 1.0 (playful)
+            "assertiveness": 0.0,   # -1.0 (deferential) to 1.0 (assertive)
+        },
+        "locked": [],
     },
 }
 
@@ -117,7 +127,14 @@ class ConfigService:
         keyring.set_password(KEYRING_SERVICE, f"ganesh_api_key_{provider}", api_key)
 
     def is_provider_configured(self, provider: str) -> bool:
-        """True if a provider has a key in keyring or env."""
+        """True if a provider has a key in keyring or env.
+
+        The ``local`` provider has no key — it's considered configured when
+        ``llm.local.base_url`` is set in the config.
+        """
+        if provider == "local":
+            base_url = self.get_setting("llm.local.base_url")
+            return bool(base_url)
         return bool(self.get_provider_key(provider) or self.get_provider_key_env(provider))
 
     def is_keyring_available(self) -> bool:

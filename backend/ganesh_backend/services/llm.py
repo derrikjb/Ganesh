@@ -1,12 +1,18 @@
 """LLM service layer.
 
 Wraps LiteLLM to provide a thin abstraction over chat completion calls for
-multiple providers: OpenAI, Anthropic, Google (Gemini), and OpenRouter.
+multiple providers: OpenAI, Anthropic, Google (Gemini), OpenRouter, and local
+OpenAI-compatible endpoints (Ollama, LM Studio, llama.cpp server, ...).
 
 API keys are resolved from the OS keyring (via :mod:`ganesh_backend.services.config`)
 with a fallback to the ``{PROVIDER}_API_KEY`` environment variable. The resolved
 key is cached per-provider for the lifetime of the process so repeated requests
 do not hit the keyring backend (which can be slow on some platforms).
+
+The ``local`` provider is special: it requires no API key (a placeholder is
+sent), routes to a user-configured ``api_base`` (``llm.local.base_url``), and
+fetches model listings from the endpoint's OpenAI-compatible ``/v1/models``
+endpoint rather than from a static registry.
 
 LiteLLM model-prefix conventions:
     - openai: plain model name (e.g. ``gpt-4o-mini``)
@@ -14,12 +20,14 @@ LiteLLM model-prefix conventions:
     - google: ``gemini/<model>`` (litellm requires the ``gemini/`` prefix)
     - openrouter: ``openrouter/<vendor>/<model>`` (litellm requires the
       ``openrouter/`` prefix)
+    - local: ``openai/<model>`` with ``api_base`` set to the local endpoint
 """
 from __future__ import annotations
 
 from functools import lru_cache
 from typing import Any, Iterator
 
+import httpx
 import litellm
 
 from ganesh_backend.services.config import config_service
@@ -32,6 +40,7 @@ SUPPORTED_PROVIDERS: tuple[str, ...] = (
     "anthropic",
     "google",
     "openrouter",
+    "local",
 )
 
 PROVIDER_MODELS: dict[str, tuple[str, ...]] = {
@@ -56,7 +65,11 @@ PROVIDER_MODELS: dict[str, tuple[str, ...]] = {
         "anthropic/claude-3.5-sonnet",
         "google/gemini-2.0-flash-001",
     ),
+    "local": (),
 }
+
+_LOCAL_DEFAULT_BASE_URL = "http://localhost:11434/v1"
+_LOCAL_PLACEHOLDER_KEY = "not-required"
 
 # Environment variable name for each provider's API key fallback.
 _PROVIDER_ENV_VAR: dict[str, str] = {
@@ -95,12 +108,16 @@ def get_api_key(provider: str = DEFAULT_PROVIDER) -> str:
     The result is cached per-provider for the process lifetime. To force a
     re-read (e.g. after the user updates the key via the config UI) call
     :func:`reset_api_key_cache`.
+
+    The ``local`` provider requires no key — a placeholder is returned.
     """
     if provider not in SUPPORTED_PROVIDERS:
         raise UnsupportedProviderError(
             f"Unknown provider: {provider!r}. "
             f"Supported: {', '.join(SUPPORTED_PROVIDERS)}"
         )
+    if provider == "local":
+        return _LOCAL_PLACEHOLDER_KEY
     key = config_service.get_provider_key(provider)
     if not key:
         env_var = _PROVIDER_ENV_VAR[provider]
@@ -122,8 +139,9 @@ def _litellm_model_name(provider: str, model: str) -> str:
     """Translate a (provider, model) pair into a LiteLLM model string.
 
     LiteLLM uses model-name prefixes to route to non-OpenAI providers. This
-    function applies the required prefix for google (``gemini/``) and
-    openrouter (``openrouter/``) when the caller hasn't already supplied it.
+    function applies the required prefix for google (``gemini/``),
+    openrouter (``openrouter/``), and local (``openai/`` so LiteLLM uses the
+    OpenAI provider path against a custom ``api_base``).
     """
     if provider == "google":
         if not model.startswith("gemini/"):
@@ -133,17 +151,44 @@ def _litellm_model_name(provider: str, model: str) -> str:
         if not model.startswith("openrouter/"):
             return f"openrouter/{model}"
         return model
+    if provider == "local":
+        if not model.startswith("openai/"):
+            return f"openai/{model}"
+        return model
     # openai and anthropic use plain model names (litellm auto-detects claude-).
     return model
 
 
+def _get_local_base_url() -> str:
+    """Return the configured local LLM endpoint base URL."""
+    return config_service.get_setting(
+        "llm.local.base_url", _LOCAL_DEFAULT_BASE_URL
+    ) or _LOCAL_DEFAULT_BASE_URL
+
+
 def get_available_models(provider: str = DEFAULT_PROVIDER) -> list[str]:
-    """Return the list of models the service can route to for ``provider``."""
+    """Return the list of models the service can route to for ``provider``.
+
+    For cloud providers this is a static registry. For ``local`` it fetches
+    the model list from the endpoint's OpenAI-compatible ``/v1/models``
+    endpoint (``GET {base_url}/models``). Returns an empty list if the
+    endpoint is unreachable.
+    """
     if provider not in SUPPORTED_PROVIDERS:
         raise UnsupportedProviderError(
             f"Unknown provider: {provider!r}. "
             f"Supported: {', '.join(SUPPORTED_PROVIDERS)}"
         )
+    if provider == "local":
+        base_url = _get_local_base_url().rstrip("/")
+        url = f"{base_url}/models"
+        try:
+            resp = httpx.get(url, timeout=10.0)
+            resp.raise_for_status()
+            data = resp.json()
+            return [m["id"] for m in data.get("data", [])]
+        except Exception:
+            return []
     return list(PROVIDER_MODELS[provider])
 
 
@@ -175,7 +220,12 @@ def chat_completion(
             f"Unknown provider: {provider!r}. "
             f"Supported: {', '.join(SUPPORTED_PROVIDERS)}"
         )
-    chosen_model = model or PROVIDER_MODELS[provider][0]
+    if provider == "local":
+        chosen_model = model or config_service.get_setting(
+            "llm.local.model", ""
+        ) or "local-model"
+    else:
+        chosen_model = model or PROVIDER_MODELS[provider][0]
     litellm_model = _litellm_model_name(provider, chosen_model)
     api_key = get_api_key(provider)
 
@@ -185,6 +235,8 @@ def chat_completion(
         "stream": stream,
         "api_key": api_key,
     }
+    if provider == "local":
+        kwargs["api_base"] = _get_local_base_url()
     if tools is not None:
         kwargs["tools"] = tools
 
@@ -225,12 +277,25 @@ def test_connection(provider: str = DEFAULT_PROVIDER) -> bool:
     Returns ``True`` on success, ``False`` on any LLM error. Raises
     :class:`UnsupportedProviderError` for unknown providers (this is a
     programmer error, not a runtime/config error).
+
+    For the ``local`` provider, validates the endpoint is reachable by
+    fetching ``GET {base_url}/models`` rather than making a completion call
+    (which would require a model to be loaded).
     """
     if provider not in SUPPORTED_PROVIDERS:
         raise UnsupportedProviderError(
             f"Unknown provider: {provider!r}. "
             f"Supported: {', '.join(SUPPORTED_PROVIDERS)}"
         )
+    if provider == "local":
+        base_url = _get_local_base_url().rstrip("/")
+        try:
+            resp = httpx.get(f"{base_url}/models", timeout=10.0)
+            resp.raise_for_status()
+            return True
+        except Exception:
+            return False
+
     try:
         api_key = get_api_key(provider)
     except MissingAPIKeyError:

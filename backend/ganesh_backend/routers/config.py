@@ -16,6 +16,10 @@ class KeyringUpdate(BaseModel):
 class ProviderKeyUpdate(BaseModel):
     api_key: str
 
+class LocalEndpointUpdate(BaseModel):
+    base_url: str
+    model: str | None = None
+
 @router.get("")
 async def get_config():
     return config_service.get_safe_config()
@@ -82,3 +86,11 @@ async def test_provider_connection(provider: str):
         )
     ok = llm_service.test_connection(provider)
     return {"provider": provider, "ok": ok}
+
+@router.post("/providers/local/endpoint")
+async def set_local_endpoint(update: LocalEndpointUpdate):
+    config_service.set_setting("llm.local.base_url", update.base_url)
+    if update.model is not None:
+        config_service.set_setting("llm.local.model", update.model)
+    llm_service.reset_api_key_cache()
+    return {"status": "ok"}

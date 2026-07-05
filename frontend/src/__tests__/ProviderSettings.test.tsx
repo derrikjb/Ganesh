@@ -32,6 +32,7 @@ const PROVIDERS = [
   { name: 'anthropic', configured: false },
   { name: 'google', configured: false },
   { name: 'openrouter', configured: false },
+  { name: 'local', configured: false },
 ]
 
 const OPENAI_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo']
@@ -199,5 +200,98 @@ describe('ProviderSettings', () => {
 
     expect(screen.getByTestId('save-provider-button')).toBeDisabled()
     expect(screen.getByTestId('test-connection-button')).toBeDisabled()
+  })
+
+  it('shows base URL and model inputs for local provider', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
+      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
+
+    render(<ProviderSettings />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('provider-select')).toBeInTheDocument()
+    })
+
+    const select = screen.getByTestId('provider-select') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'local' } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('local-base-url-input')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('local-model-input')).toBeInTheDocument()
+    // No API key input for local.
+    expect(screen.queryByTestId('api-key-input')).not.toBeInTheDocument()
+  })
+
+  it('saves local endpoint config on Save click', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
+      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
+      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
+      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
+
+    render(<ProviderSettings />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('provider-select')).toBeInTheDocument()
+    })
+
+    const select = screen.getByTestId('provider-select') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'local' } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('local-base-url-input')).toBeInTheDocument()
+    })
+
+    const baseUrlInput = screen.getByTestId('local-base-url-input') as HTMLInputElement
+    fireEvent.change(baseUrlInput, { target: { value: 'http://localhost:1234/v1' } })
+    const modelInput = screen.getByTestId('local-model-input') as HTMLInputElement
+    fireEvent.change(modelInput, { target: { value: 'llama3.2' } })
+
+    const saveBtn = screen.getByTestId('save-provider-button')
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/config/providers/local/endpoint',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ base_url: 'http://localhost:1234/v1', model: 'llama3.2' }),
+        })
+      )
+    })
+  })
+
+  it('tests local connection and shows success result', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
+      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
+      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
+      .mockResolvedValueOnce(mockResponse({ ok: true }))
+
+    render(<ProviderSettings />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('provider-select')).toBeInTheDocument()
+    })
+
+    const select = screen.getByTestId('provider-select') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'local' } })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('local-base-url-input')).toBeInTheDocument()
+    })
+
+    const baseUrlInput = screen.getByTestId('local-base-url-input') as HTMLInputElement
+    fireEvent.change(baseUrlInput, { target: { value: 'http://localhost:11434/v1' } })
+
+    const testBtn = screen.getByTestId('test-connection-button')
+    fireEvent.click(testBtn)
+
+    await waitFor(() => {
+      const result = screen.getByTestId('provider-test-result')
+      expect(result).toHaveTextContent('successful')
+    })
   })
 })

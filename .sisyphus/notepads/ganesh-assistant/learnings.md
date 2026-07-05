@@ -295,3 +295,83 @@
 - **Concurrent task collision (again)**: Task 25 (sub-agents) added `agents_router` to `main.py` WHILE I was editing it. My first `plugins_router` include was lost. Re-applied after re-reading the current file state. LESSON REINFORCED: always re-read shared files before re-editing in a concurrent tree.
 - **No new native deps**: plugin system uses only stdlib (`importlib`, `json`, `pathlib`). No `NATIVE_DEPS.md` update needed.
 - Tests: 5 in `tests/test_plugins.py` (discovery, load, invoke, hot-reload, router smoke). Full suite: 87 passing (82 baseline + 5 new). ruff + mypy clean on new files.
+
+## Wave 3: Multi-Provider LLM (Task — Anthropic, Google, OpenRouter via LiteLLM)
+- LiteLLM 1.91.0 supports openai/anthropic/google/openrouter via direct HTTP calls — NO need to install `anthropic` or `google-generativeai` SDK packages. LiteLLM makes the HTTP calls itself using `httpx`.
+- LiteLLM model-prefix conventions (critical, non-obvious):
+  - openai: plain model name (`gpt-4o-mini`)
+  - anthropic: plain model name (`claude-3-5-sonnet-20240620`) — litellm auto-detects the `claude-` prefix
+  - google: REQUIRES `gemini/` prefix (`gemini/gemini-1.5-flash`) — litellm won't route without it
+  - openrouter: REQUIRES `openrouter/` prefix (`openrouter/openai/gpt-4o-mini`)
+  - `_litellm_model_name(provider, model)` applies the prefix when the caller hasn't already supplied it (idempotent — safe to pass a pre-prefixed name).
+- API key storage: keyring service `ganesh`, key `ganesh_api_key_{provider}` (e.g. `ganesh_api_key_anthropic`). Env fallback vars: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`.
+- `get_api_key(provider)` uses `@lru_cache(maxsize=None)` (per-provider cache) — `reset_api_key_cache()` clears ALL cached keys (call after any key update via config UI).
+- `ConfigService` extended with `get_provider_key(provider)` (keyring only), `get_provider_key_env(provider)` (env only), `set_provider_key(provider, key)`, `is_provider_configured(provider)`. The original `get_api_key()`/`set_api_key()` (openai-specific) are kept for backward compat with existing tests.
+- Chat router `ChatRequest` now has `provider: str = "openai"` (defaults to openai for backward compat — existing clients sending only `{messages, model}` still work). `ChatResponse` now includes `provider` field. Unknown provider → 400 (validated in router BEFORE calling the service so the error message is consistent).
+- Config router new endpoints: `GET /api/config/providers` (list with `configured` bool), `POST /api/config/providers/{provider}/key` (store + reset llm cache), `GET /api/config/providers/{provider}/models` (list models), `POST /api/config/providers/{provider}/test` (test connection). The key-storage endpoint calls `llm_service.reset_api_key_cache()` so the next chat request picks up the new key without a sidecar restart.
+- `test_connection(provider)` makes a `max_tokens=1` completion call — returns `True`/`False` (never raises for runtime errors; only raises `UnsupportedProviderError` for programmer error). `MissingAPIKeyError` is caught internally → returns `False`.
+- Tool calling: LiteLLM normalizes OpenAI-format tool definitions across providers — pass `tools=[{"type":"function","function":{...}}]` and litellm handles the per-provider format translation. No adapter shim needed for the tool INPUT; the tool_calls in the RESPONSE come back in normalized OpenAI format (`message.tool_calls[i].function.name/arguments`). This is why the spec said "add adapter if needed" — it wasn't needed.
+- Frontend `ProviderSettings.tsx`: provider dropdown (loads from `/api/config/providers`), model dropdown (loads from `/api/config/providers/{provider}/models` on provider change), API key input with show/hide toggle, Test Connection button (saves key first, then calls test endpoint), Save button. Test result shown as green/red banner. Buttons disabled when no API key entered.
+- Frontend test pattern: mock `sidecarFetch` with chained `mockResolvedValueOnce` for the sequential API calls (providers list → models list → save key → test). Use `waitFor` on the last expected DOM state.
+- No new native deps — litellm was already in NATIVE_DEPS. No NATIVE_DEPS.md update needed.
+- Tests: 14 in `tests/test_llm_providers.py` (5 required + 9 additional for router/config coverage). Full backend suite: 108 passing (the 1 failure in `test_conversations.py` is from a parallel untracked task, not mine). Frontend: 137 passing (7 new in `ProviderSettings.test.tsx`).
+
+## Wave 3: Multi-Provider LLM Support (Task 28)
+- LiteLLM model-prefix conventions: openai=plain name, anthropic=plain name (litellm auto-detects `claude-`), google=`gemini/<model>`, openrouter=`openrouter/<vendor>/<model>`.
+- Provider API keys stored in keyring under service="ganesh", username=`ganesh_api_key_{provider}`. Legacy `openai_api_key` username kept for backward compat.
+- `get_api_key(provider)` is lru_cached per-provider; `reset_api_key_cache()` clears all caches (call after key updates via config UI).
+- LiteLLM normalizes tool-call format across providers — pass tools in OpenAI format, litellm translates to Anthropic's tool_use blocks internally. No manual adapter needed.
+- `test_connection(provider)` makes a minimal `max_tokens=1` call; returns bool (False on any exception including MissingAPIKeyError).
+- Chat router `ChatRequest` model has `provider: str = DEFAULT_PROVIDER` (defaults to "openai") for backward compat.
+- Config router endpoints: GET /api/config/providers, POST /api/config/providers/{provider}/key, GET /api/config/providers/{provider}/models, POST /api/config/providers/{provider}/test.
+- No new native deps — litellm (already registered) handles all 4 providers.
+- Pre-existing broken `test_conversations.py` is from an unrelated incomplete feature; exclude with `--ignore=tests/test_conversations.py` when running full suite.
+
+## Wave 3: Conversation History (Task — persistence + search + export + delete)
+- `ConversationStore` (`services/conversations.py`): SQLite for conversations + messages, LanceDB for message embeddings (semantic search). Schema: `conversations(id, title, profile_id, created_at, updated_at)`, `messages(id, conversation_id, role, content, created_at)` with FK CASCADE.
+- SQLite path defaults to `$GANESH_DATA_DIR/conversations.db` (or `~/.ganesh/data/conversations.db`). LanceDB URI defaults to `:memory:` in the service constructor but the router overrides to `$GANESH_DATA_DIR/lancedb` for production.
+- `check_same_thread=False` on sqlite3.connect is required — FastAPI's threadpool calls the store from worker threads. SQLite serialises writes internally so this is safe.
+- Auto-title: first 50 chars of first user message when title is still "New Conversation". Updated in the same transaction as the message insert.
+- Embedding is best-effort: wrapped in try/except so a LanceDB failure never breaks message persistence. This is critical for offline/degraded operation.
+- **HashEmbedder limitation**: it's deterministic but NOT truly semantic — it hashes 8-byte text windows at 4-byte strides. Short texts get artificially high cosine similarity because most dimensions are a constant baseline (when offset > text length, the chunk is just the dimension index). Tests must assert membership (the relevant conversation appears in results) rather than strict rank-1 ordering. The memory layer's tests work because all stored memories are similar length, so the baseline effect is uniform.
+- Router (`routers/conversations.py`): 7 endpoints under `/api/conversations`. `GET /search?q=` uses `alias="q"` so the query param is `q` (short) while the Python param is `q`. Export is `POST /{id}/export` with body `{"format": "json|markdown"}` — returns `{format, content}` so the frontend can trigger a Blob download.
+- Singleton pattern: `get_conversation_service()` / `reset_conversation_service()` / `set_conversation_service()` for test injection (same as memory/task_manager/voice_activation).
+- Frontend `ConversationHistory.tsx`: sidebar panel with search (debounced 300ms), list, export dropdown (JSON/Markdown), delete with confirmation modal. Uses `sidecarFetch` mock pattern from TaskPanel. 7 tests cover render, empty state, select, search, export, delete, error.
+- Chat integration: `useChat` hook now creates a conversation on first message (`ensureConversation`), persists each message (`persistMessage`), and exposes `loadConversation(conv)` to load a past conversation. `conversationId` is in the return. `clearMessages` resets `conversationId` to null so the next message starts a new conversation.
+- App.tsx ↔ ChatContainer decoupling: App owns the history sidebar; ChatContainer owns the chat. A `CustomEvent('ganesh:load-conversation')` bridges them — App dispatches on sidebar select, ChatContainer listens and calls `loadConversation`. This avoids lifting useChat to App level (which would require refactoring ChatContainer's entire prop interface).
+- **Pre-existing file collision**: `services/conversations.py` and `tests/test_conversations.py` already existed from a previous (incomplete) attempt. The service had a Python syntax error (misindented block in `add_message`). Rewrote the service cleanly; fixed the search test assertion (rank-1 → membership). The test file had 7 tests (5 required + 2 extra: auto-title + list).
+- **Duplicate file content**: `useChat.ts` and `App.tsx` had full duplicate content from the previous attempt (two copies of the same functions/state declarations). Truncated `useChat.ts` to 240 lines; rewrote `App.tsx` cleanly. Always check for duplicates when inheriting incomplete work.
+- Verification: backend 7/7 pass, full suite 96 pass. Frontend 144/144 pass (20 files), tsc clean.
+
+## Task 11: Conversation History (persistence + search + export + delete)
+- LanceDB `:memory:` URI creates a PERSISTENT directory named `:memory:` in the CWD — it is NOT truly in-memory! All tests using `:memory:` share the same directory, causing cross-test contamination. Use a temp directory (e.g. `tmp_path / "lancedb"`) in test fixtures instead.
+- HashEmbedder produces deterministic but NOT semantically meaningful vectors (hash-based). Pure vector search ranks arbitrarily. Implemented hybrid search: vector similarity + keyword matching (SQLite LIKE), sorted by (keyword_score, vector_score). This makes search actually work with HashEmbedder.
+- Conversation auto-title: first 50 chars of first user message, truncated (no ellipsis). Default title "New Conversation" replaced on first user message.
+- useChat persistence: best-effort, fire-and-forget. `ensureConversation` creates conversation on first message, `persistMessage` saves user+assistant messages. All persistence errors caught silently so chat still works when backend is unavailable. This pattern keeps existing chat streaming tests passing (mock returns non-Response object, persistence calls fail silently).
+- Cross-component communication for loading conversations: used `window.dispatchEvent(new CustomEvent('ganesh:load-conversation', { detail: conv }))` from App.tsx, ChatContainer listens via `useEffect`. Avoids lifting useChat to App level.
+- tsc stale cache can produce false "Cannot redeclare" errors. Clearing tsbuildinfo or re-running resolves it.
+
+## Wave 4: Personality Trait Matrix (Task 30)
+- `PersonalityEngine` lives in `backend/ganesh_backend/services/personality.py`. Module-level singleton `engine` is used by the router; tests inject a `FakeConfig` via `PersonalityEngine(config=...)` to avoid touching the real config.yaml.
+- Trait bounds are asymmetric: `formality`, `verbosity`, `assertiveness` are bipolar [-1.0, 1.0]; `warmth`, `humor` are unipolar [0.0, 1.0]. This is documented in `TRAIT_BOUNDS` and the spec — do NOT normalize.
+- `MUTATION_RATE_CAP = 0.15` caps per-shift delta. The `_analyze_context` heuristic normalizes raw keyword counts to [-cap, +cap] BEFORE applying, then `shift_traits` clamps the result to trait bounds. Two-stage clamping is intentional.
+- Shifts are session-scoped: `_current` dict drifts from `_baseline` but `_baseline` (loaded from config) is never written back. `reset_traits()` copies baseline into current. A fresh `PersonalityEngine` instance reads the original baseline.
+- Locked traits: `_locked` set loaded from `personality.locked` config list. `shift_traits` skips locked traits. `lock_trait`/`unlock_trait` mutate the in-memory set only (not persisted).
+- Context heuristics are deliberately simple deterministic keyword counters (Task 35 owns proactive learning). Each trait has opposing token pairs (casual/formal, warm/cold, etc.).
+- Router prefix: `/api/personality`. Endpoints: GET/PUT `/traits`, POST `/shift`, POST `/lock/{trait}`, POST `/unlock/{trait}`, POST `/reset`, GET `/system-prompt`.
+- Frontend `PersonalityPanel.tsx`: sliders per trait (range input, step 0.05), lock toggle (🔒/🔓), reset button, shows current vs baseline. Uses `sidecarFetch` like other panels.
+- vitest slider value assertion: `toHaveValue('0.1')` (string), NOT `toHaveValue(0.1)` (number) — range inputs stringify.
+- Pre-existing frontend test failures in `ProviderSettings.test.tsx` (2) and `documentViewer.test.tsx` (6) are from other in-progress work (local LLM task) — NOT caused by personality changes. Confirmed zero references to personality code in those files.
+
+## Wave 3: Local LLM Support (Task — Ollama/LM Studio via OpenAI-compatible endpoints)
+- Local provider routes through LiteLLM with `model="openai/<model>"` + `api_base=<base_url>` — LiteLLM uses the OpenAI provider path against the custom endpoint. No `anthropic`/`google` SDK needed.
+- `get_api_key("local")` returns a placeholder `"not-required"` — never raises `MissingAPIKeyError`. The local provider short-circuits in `get_api_key` before the keyring/env lookup.
+- `get_available_models("local")` fetches dynamically from `GET {base_url}/models` (OpenAI-compatible `/v1/models` endpoint) via `httpx.get`, returns `[]` on any error. This differs from cloud providers which use a static `PROVIDER_MODELS` registry.
+- `test_connection("local")` validates endpoint reachability via `GET {base_url}/models` (not a completion call) — avoids requiring a model to be loaded just to test connectivity.
+- Config storage: `llm.local.base_url` and `llm.local.model` via `config_service.set_setting` (YAML dot-notation). New router endpoint `POST /api/config/providers/local/endpoint` stores both.
+- `is_provider_configured("local")` checks `llm.local.base_url` presence (not keyring) — local has no key.
+- Frontend `ProviderSettings.tsx`: when `selectedProvider === 'local'`, renders base URL + model text inputs instead of model dropdown + API key input. The `canSaveOrTest` flag uses `localBaseUrl.trim()` for local, `apiKey.length` for cloud.
+- Pre-existing bug in `main.py:126`: `personality_router.router` should be `personality_router` (the import is `from ... import router as personality_router`). Fixed to unblock all main-importing tests.
+- Frontend test gotcha: when rendering ProviderSettings with default provider 'openai', the useEffect fires `loadModels('openai')` which consumes a mock. Local-provider tests must mock the initial models fetch too (`.mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))`) even though they immediately switch to 'local'.
+- No new native deps — `httpx` was already a runtime dependency, `litellm` already in NATIVE_DEPS. No NATIVE_DEPS.md update needed.
+- Tests: 9 in `tests/test_local_llm.py` (3 required + 6 coverage). Full backend suite: 122 passing. Frontend: 10 in ProviderSettings.test.tsx (3 new local tests). tsc clean.
