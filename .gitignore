@@ -39,6 +39,6 @@ backend/:memory:/
 .classpath
 .factorypath
 .opencode/
-.sisyphus/
-! .sisyphus/plans/
-! .sisyphus/notepads/
+.sisyphus/*
+!.sisyphus/plans/
+!.sisyphus/notepads/
