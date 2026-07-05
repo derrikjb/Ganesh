@@ -45,4 +45,10 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
+
+  --chat-user-bg: var(--chat-user-bg);
+  --chat-user-text: var(--chat-user-text);
+  --chat-assistant-bg: var(--chat-assistant-bg);
+  --chat-assistant-text: var(--chat-assistant-text);
+  --chat-bubble-radius: var(--chat-bubble-radius);
 }

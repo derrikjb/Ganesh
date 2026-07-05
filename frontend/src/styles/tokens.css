@@ -98,4 +98,20 @@
   --z-overlay: 300;
   --z-modal: 400;
   --z-toast: 500;
+
+  /* ── Border Width ───────────────────────────────────── */
+
+  --border-width-none: 0px;
+  --border-width-sm: 1px;
+  --border-width-md: 2px;
+  --border-width-lg: 3px;
+
+  /* ── Chat Bubble Defaults ───────────────────────────── */
+
+  --chat-user-bg: var(--color-accent);
+  --chat-user-text: var(--color-text-inverse);
+  --chat-assistant-bg: var(--color-bg-tertiary);
+  --chat-assistant-text: var(--color-text-primary);
+  --chat-bubble-radius: var(--radius-lg);
+  --chat-bubble-style: rounded;
 }

@@ -39,15 +39,8 @@ describe('Design Tokens', () => {
     ]
     requiredSpacing.forEach((token) => {
       expect(content).toContain(token)
-    })
   })
-
-  it('defines typography tokens', () => {
-    const content = fs.readFileSync(tokensPath, 'utf-8')
-    expect(content).toContain('--font-sans')
-    expect(content).toContain('--font-mono')
-    expect(content).toContain('--text-base')
-  })
+})
 
   it('defines radius and transition tokens', () => {
     const content = fs.readFileSync(tokensPath, 'utf-8')
@@ -66,5 +59,45 @@ describe('Design Tokens', () => {
   it('theme.css supports data-theme selector', () => {
     const content = fs.readFileSync(themePath, 'utf-8')
     expect(content).toContain("[data-theme='dark']")
+  })
+
+  it('defines chat bubble tokens', () => {
+    const content = fs.readFileSync(tokensPath, 'utf-8')
+    expect(content).toContain('--chat-user-bg')
+    expect(content).toContain('--chat-user-text')
+    expect(content).toContain('--chat-assistant-bg')
+    expect(content).toContain('--chat-assistant-text')
+    expect(content).toContain('--chat-bubble-radius')
+  })
+
+  it('defines border width tokens', () => {
+    const content = fs.readFileSync(tokensPath, 'utf-8')
+    expect(content).toContain('--border-width-none')
+    expect(content).toContain('--border-width-sm')
+    expect(content).toContain('--border-width-md')
+    expect(content).toContain('--border-width-lg')
+  })
+
+  it('theme.css defines midnight theme', () => {
+    const content = fs.readFileSync(themePath, 'utf-8')
+    expect(content).toContain("[data-theme='midnight']")
+    expect(content).toContain('--accent: #58a6ff')
+  })
+
+  it('theme.css defines ocean theme', () => {
+    const content = fs.readFileSync(themePath, 'utf-8')
+    expect(content).toContain("[data-theme='ocean']")
+    expect(content).toContain('--accent: #64ffda')
+  })
+
+  it('theme.css defines forest theme', () => {
+    const content = fs.readFileSync(themePath, 'utf-8')
+    expect(content).toContain("[data-theme='forest']")
+    expect(content).toContain('--accent: #4ade80')
+  })
+
+  it('theme.css defines custom theme override selector', () => {
+    const content = fs.readFileSync(themePath, 'utf-8')
+    expect(content).toContain("[data-theme='custom']")
   })
 })

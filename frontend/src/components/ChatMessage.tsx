@@ -1,7 +1,9 @@
 import type { ChatMessage as ChatMessageType } from '../types/chat'
+import { DocumentThumbnail } from './DocumentThumbnail'
 
 interface ChatMessageProps {
   message: ChatMessageType
+  onOpenDocument?: (file: { name: string; type: string; size: number; content: string }) => void
 }
 
 function formatTimestamp(date: Date): string {
@@ -24,7 +26,7 @@ function renderMarkdownLike(content: string): string {
   return html
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onOpenDocument }: ChatMessageProps) {
   const isUser = message.role === 'user'
 
   return (
@@ -42,21 +44,20 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {message.attachedFiles && message.attachedFiles.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {message.attachedFiles.map((file, i) => (
-              <div
+              <DocumentThumbnail
                 key={i}
-                className="flex items-center gap-1 text-xs bg-bg-secondary rounded px-2 py-1"
-              >
-                {file.preview ? (
-                  <img
-                    src={file.preview}
-                    alt={file.name}
-                    className="w-8 h-8 object-cover rounded"
-                  />
-                ) : (
-                  <span className="text-text-muted">[file]</span>
-                )}
-                <span className="truncate max-w-[120px]">{file.name}</span>
-              </div>
+                file={file}
+                onClick={() => {
+                  if (onOpenDocument && file.preview) {
+                    onOpenDocument({
+                      name: file.name,
+                      type: file.type,
+                      size: file.size,
+                      content: file.preview,
+                    })
+                  }
+                }}
+              />
             ))}
           </div>
         )}
@@ -76,8 +77,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
           {message.status === 'sending' && (
             <span className="text-xs text-text-muted">Sending...</span>
           )}
-        </div>
-      </div>
-    </div>
+         </div>
+       </div>
+     </div>
   )
 }
+
