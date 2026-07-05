@@ -2,9 +2,15 @@ import { useState, useMemo } from 'react';
 import { VisualizerCanvas } from '../visualizer/VisualizerCanvas';
 import { list as listPlugins, register } from '../visualizer/registry';
 import { WaveformVisualizer } from '../visualizer/plugins/WaveformVisualizer';
+import { FreqBarsVisualizer } from '../visualizer/plugins/FreqBarsVisualizer';
+import { ParticleVisualizer } from '../visualizer/plugins/ParticleVisualizer';
+import { HoloFaceVisualizer } from '../visualizer/plugins/HoloFaceVisualizer';
 import type { VisualizerPlugin, AudioData } from '../visualizer/types';
 
 register(WaveformVisualizer);
+register(FreqBarsVisualizer);
+register(ParticleVisualizer);
+register(HoloFaceVisualizer);
 
 function generateMockAudioData(length: number = 512): AudioData {
   const data = new Float32Array(length);

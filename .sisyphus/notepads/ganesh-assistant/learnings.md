@@ -225,3 +225,25 @@
 - Frontend `VoiceActivation.tsx` uses `navigator.mediaDevices.getUserMedia({ audio: true })`, `MediaRecorder` for push-to-talk, `AudioContext` + `ScriptProcessor` for VAD/wake-word streaming. jsdom has neither — tests must polyfill `MediaRecorder` and `AudioContext` with fake classes and stub `navigator.mediaDevices`.
 - Tauri CSP updated: added `media-src 'self'` to allow microphone capture in the webview.
 - Pre-existing tsc errors (21 lines) and 4 vitest failures in `holo-face-visualizer.test.ts` / `freq-bars-visualizer.test.ts` / `particle-visualizer.test.ts` are from Task 18/19 (visualizer + holo-face) and are OUT OF SCOPE for Task 17 — do not touch.
+
+## Wave 2: Additional Visualizers (Task 19) — freq bars, particles, holo-face
+- Three visualizers added: `FreqBarsVisualizer` (Canvas 2D bar graph), `ParticleVisualizer` (Canvas 2D particle system), `HoloFaceVisualizer` (Three.js wireframe icosahedron with vertex displacement).
+- `VisualizerCanvas.tsx` updated to detect WebGL plugins by name (`'Holo Face'`) and use `webgl2` context instead of `2d`.
+- All visualizers registered in `VoiceVisualizer.tsx` via `register()` calls at module evaluation time.
+- `index.ts` exports all four visualizers.
+- **Module-level state pattern**: `ParticleVisualizer` and `HoloFaceVisualizer` use module-level `const` state objects instead of properties on the `VisualizerPlugin` object literal, because the interface doesn't allow extra properties. This avoids TS2353 errors.
+- **Three.js mock gotcha**: When mocking Three.js for tests, every object returned by constructors must have ALL methods that the real code calls — including `geometry.dispose()` on `Points`. Missing this causes `TypeError: X.dispose is not a function` at runtime.
+- **Registry clear() gotcha**: `VoiceVisualizer` registers plugins at module load time (top-level `register()` calls). Calling `clear()` in test `beforeEach` wipes the registry AFTER modules are loaded, so plugins are gone. Solution: don't `clear()` in tests that render `VoiceVisualizer`, or re-register before each test.
+- `three` and `@types/three` added to package.json.
+- All 124 tests pass (17 test files), tsc --noEmit clean.
+
+## Wave 2: Additional Visualizers (Task 19) — freq bars, particles, holo-face
+- Three visualizers added: `FreqBarsVisualizer` (Canvas 2D bar graph), `ParticleVisualizer` (Canvas 2D particle system), `HoloFaceVisualizer` (Three.js wireframe icosahedron with vertex displacement).
+- `VisualizerCanvas.tsx` updated to detect WebGL plugins by name (`'Holo Face'`) and use `webgl2` context instead of `2d`.
+- All visualizers registered in `VoiceVisualizer.tsx` via `register()` calls at module evaluation time.
+- `index.ts` exports all four visualizers.
+- **Module-level state pattern**: `ParticleVisualizer` and `HoloFaceVisualizer` use module-level `const` state objects instead of properties on the `VisualizerPlugin` object literal, because the interface doesn't allow extra properties. This avoids TS2353 errors.
+- **Three.js mock gotcha**: When mocking Three.js for tests, every object returned by constructors must have ALL methods that the real code calls — including `geometry.dispose()` on `Points`. Missing this causes `TypeError: X.dispose is not a function` at runtime.
+- **Registry clear() gotcha**: `VoiceVisualizer` registers plugins at module load time (top-level `register()` calls). Calling `clear()` in test `beforeEach` wipes the registry AFTER modules are loaded, so plugins are gone. Solution: don't `clear()` in tests that render `VoiceVisualizer`, or re-register before each test.
+- `three` and `@types/three` added to package.json.
+- All 124 tests pass (17 test files), tsc --noEmit clean.

@@ -12,11 +12,13 @@ export function VisualizerCanvas({ plugin, audioData, className }: VisualizerCan
   const pluginRef = useRef<VisualizerPlugin>(plugin);
   const animFrameRef = useRef<number>(0);
 
+  const isWebGL = plugin.name === 'Holo Face';
+
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext(isWebGL ? 'webgl2' : '2d');
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
@@ -25,26 +27,28 @@ export function VisualizerCanvas({ plugin, audioData, className }: VisualizerCan
     if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
+      if (!isWebGL) {
+        (ctx as CanvasRenderingContext2D).scale(dpr, dpr);
+      }
     }
 
     pluginRef.current.render({
-      ctx,
+      ctx: ctx as any,
       audioData,
       dimensions: { width: rect.width, height: rect.height },
     });
 
     animFrameRef.current = requestAnimationFrame(render);
-  }, [audioData]);
+  }, [audioData, isWebGL]);
 
   useEffect(() => {
     pluginRef.current = plugin;
 
     const canvas = canvasRef.current;
     if (canvas) {
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext(isWebGL ? 'webgl2' : '2d');
       if (ctx) {
-        plugin.init?.(ctx);
+        plugin.init?.(ctx as any);
       }
     }
 
@@ -54,7 +58,7 @@ export function VisualizerCanvas({ plugin, audioData, className }: VisualizerCan
       cancelAnimationFrame(animFrameRef.current);
       plugin.destroy?.();
     };
-  }, [plugin, render]);
+  }, [plugin, render, isWebGL]);
 
   return (
     <canvas

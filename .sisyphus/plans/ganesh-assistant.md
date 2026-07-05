@@ -1502,7 +1502,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 17. Voice Activation Modes (Push-to-talk, Wake Word, VAD) + Barge-in
+- [x] 17. Voice Activation Modes (Push-to-talk, Wake Word, VAD) + Barge-in
 
   **What to do**:
   - Create `backend/voice/activation.py`: configurable activation mode
@@ -1600,7 +1600,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 19. Additional Visualizer Implementations (Freq Bars, Particles, Holo-face)
+- [x] 19. Additional Visualizer Implementations (Freq Bars, Particles, Holo-face)
 
   **What to do**:
   - Create `frontend/src/visualizers/FreqBarsViz.ts`: frequency bar graph from FFT bins
