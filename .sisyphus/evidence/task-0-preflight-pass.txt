@@ -1,0 +1,11 @@
+Ganesh AI Assistant - Environment Preflight Check
+================================================
+[0;32m[PASS][0m Python 3.12.3
+[0;31m[FAIL][0m Node.js version could not be detected
+[0;31m[FAIL][0m npm version 1.3.11 < 10.0.0
+[0;31m[FAIL][0m Rust (cargo) is missing. Install from https://rustup.rs/
+[1;33m[WARN][0m Tauri CLI is missing. Install with: cargo install tauri-cli --version '^2.0.0-beta'
+[0;32m[PASS][0m System dependencies met
+[0;32m[PASS][0m Disk space: 1010GB free
+------------------------------------------------
+Preflight check failed. Please install missing requirements.

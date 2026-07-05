@@ -27,3 +27,19 @@
 - Initialized git repository with appropriate .gitignore.
 - Created README.md and LICENSE (PolyForm Noncommercial 1.0.0).
 - Verified directory structure manually.
+## Wave 0: Scaffold Fixes
+- Replaced LICENSE placeholder with full PolyForm Noncommercial License 1.0.0 text.
+- Fixed frontend React scaffold:
+    - Replaced main.ts with main.tsx.
+    - Created App.tsx with minimal 'Ganesh' heading.
+    - Updated index.html and index.css.
+    - Created vite.config.ts with @vitejs/plugin-react.
+    - Removed vanilla Vite template assets and files.
+- Updated Tauri configuration:
+    - Restricted bundle targets to Windows and Linux (deb, appimage, msi, nsis).
+    - Removed .icns icon.
+    - Set CSP to allow connect-src http://127.0.0.1:*.
+- Updated and verified project structure tests:
+    - Backend tests verify critical directories and files.
+    - Frontend tests verify key React and Vite files.
+- Note: cargo check could not be verified due to missing cargo/rustc in the environment.

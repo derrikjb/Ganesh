@@ -4,7 +4,7 @@
   "session_ids": [
     "ses_0d003901bffe0X25Ws0379SrGI"
   ],
-  "session_origins": {
+  "session_origins": {"ses_0cfde471effe2aQnZ7HpxguoDn": "direct",
     "ses_0d003901bffe0X25Ws0379SrGI": "direct"
   },
   "plan_name": "ganesh-assistant",

@@ -160,12 +160,13 @@ Evidence saved to `.sisyphus/evidence/task-{N}-{scenario-slug}.{ext}`.
 
 ```
 Wave 0 (Foundation Spike — GATE for all features):
-├── Task 1: Repo scaffold + project structure + git init [quick]
-├── Task 2: GitHub Actions CI matrix (Win + Linux) [quick]
-├── Task 3: Python FastAPI sidecar + /health endpoint + PyInstaller spec [deep]
-├── Task 4: Tauri v2 shell + React/TS frontend scaffold + sidecar lifecycle [deep]
-├── Task 5: Playwright integration test layer (real app + stub LLM) [deep]
-└── Task 6: NATIVE_DEPS.md registry + frozen binary native dep CI check [quick]
+├── Task 0: Environment preflight + toolchain verification [quick]
+├── Task 1: Repo scaffold + directory structure + git init + license [quick]
+├── Task 2: GitHub Actions CI matrix (Win + Linux) [quick] (after Task 1)
+├── Task 3: Python FastAPI sidecar + /health endpoint + PyInstaller spec [deep] (after Task 1, parallel with 2)
+├── Task 4: Tauri v2 shell + React/TS frontend scaffold + sidecar lifecycle [deep] (after Task 3)
+├── Task 5: Playwright integration test layer (real app + stub LLM) [deep] (after Task 4)
+└── Task 6: NATIVE_DEPS.md registry + frozen binary native dep CI check [quick] (after Task 3, parallel with 4)
 
 Wave 1 (MVP — Core Chat + Basic Memory + File Browsing + Web Search):
 ├── Task 7: Design system tokens + dark theme foundation [visual-engineering]
@@ -219,7 +220,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews, then user okay):
 └── Task F4: Scope fidelity check (deep)
 -> Present results -> Get explicit user okay
 
-Critical Path: Wave 0 (T1-T6) → Wave 1 (T7-T14) → Wave 2 (T15-T23) → Wave 3 (T24-T29) → Wave 4 (T30-T37) → Wave 5 (T38-T41) → F1-F4 → user okay
+Critical Path: Wave 0 (T0→T1→T3→T4→T5, T2/T6 parallel) → Wave 1 → Wave 2 → Wave 3 → Wave 4 → Wave 5 → F1-F4 → user okay
 Parallel Speedup: ~70% faster than sequential
 Max Concurrent: 6 (Waves 0 & 1)
 ```
@@ -228,22 +229,23 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 | Task | Depends On | Blocks | Wave |
 |------|-----------|--------|------|
-| 1 | — | 2-6 | 0 |
+| 0 | — | 1 | 0 |
+| 1 | 0 | 2, 3, 4, 6 | 0 |
 | 2 | 1 | all CI-dependent | 0 |
 | 3 | 1 | 4, 5, 6 | 0 |
 | 4 | 1, 3 | 5, 7, 9, 14 | 0 |
 | 5 | 4 | all UI integration tests | 0 |
-| 6 | 3 | all Python dep additions | 0 |
+| 6 | 1, 3 | all Python dep additions | 0 |
 | 7 | 4 | 9, 18, 19, 21 | 1 |
-| 8 | 3, 6 | 9 | 1 |
+| 8 | 3 | 9, 28 | 1 |
 | 9 | 7, 8 | 20 | 1 |
-| 10 | 3, 6 | 31 | 1 |
+| 10 | 3 | 31 | 1 |
 | 11 | 3 | — | 1 |
 | 12 | 3 | — | 1 |
-| 13 | 1 | 8, 28 | 1 |
+| 13 | 3 | 8, 28 | 1 |
 | 14 | 4 | — | 1 |
-| 15 | 4, 6 | 17 | 2 |
-| 16 | 4, 6 | 17 | 2 |
+| 15 | 4 | 17 | 2 |
+| 16 | 4 | 17 | 2 |
 | 17 | 15, 16 | — | 2 |
 | 18 | 7 | 19, 32, 37 | 2 |
 | 19 | 18 | — | 2 |
@@ -251,7 +253,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 | 21 | 7 | — | 2 |
 | 22 | 15, 16 | 38 | 2 |
 | 23 | 9 | — | 2 |
-| 24 | 3, 6 | 25 | 3 |
+| 24 | 3 | 25 | 3 |
 | 25 | 24 | 26 | 3 |
 | 26 | 25 | — | 3 |
 | 27 | 10 | — | 3 |
@@ -272,7 +274,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ### Agent Dispatch Summary
 
-- **Wave 0**: **6 tasks** — T1, T2 → `quick`; T3, T4, T5 → `deep`; T6 → `quick`
+- **Wave 0**: **7 tasks** — T0, T1, T2, T6 → `quick`; T3, T4, T5 → `deep`
 - **Wave 1**: **8 tasks** — T7 → `visual-engineering`; T8, T10 → `deep`; T9 → `visual-engineering`; T11, T12, T14 → `unspecified-high`; T13 → `quick`
 - **Wave 2**: **9 tasks** — T15, T16, T17 → `deep`; T18, T19, T20, T21 → `visual-engineering`; T22, T23 → `unspecified-high`
 - **Wave 3**: **6 tasks** — T24, T25, T26 → `deep`; T27, T28, T29 → `unspecified-high`
@@ -284,28 +286,139 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ## TODOs
 
-- [ ] 1. Repo Scaffold + Project Structure + Git Init
+- [ ] 0. Environment Preflight + Toolchain Verification
 
   **What to do**:
-  - Clone https://github.com/derrikjb/Ganesh.git and set up monorepo structure:
-    - `backend/` (Python FastAPI sidecar: `main.py`, `pyproject.toml`, `tests/`)
-    - `frontend/` (React/TS: `src/`, `package.json`, `vite.config.ts`, `vitest.config.ts`)
-    - `src-tauri/` (Tauri v2: `tauri.conf.json`, `Cargo.toml`, `src/main.rs`)
-    - `.github/workflows/` (CI)
+  - Create a preflight check script (`scripts/preflight.sh` for Linux, `scripts/preflight.ps1` for Windows) that verifies the build environment before any other task runs:
+    - **Python**: `python --version` ≥ 3.11 (fail if older)
+    - **Node.js**: `node --version` ≥ 20 (fail if older)
+    - **npm**: `npm --version` ≥ 10
+    - **Rust**: `rustc --version` and `cargo --version` (warn if not installed — Tauri build requires Rust; if missing, print install instructions: `https://rustup.rs/`)
+    - **Tauri CLI**: `npx tauri --version` or `cargo tauri --version` (warn if not installed — install via `npm install -D @tauri-apps/cli@2.11.4` or `cargo install tauri-cli`)
+    - **System deps (Linux only)**: check for `libwebkit2gtk-4.1-dev`, `libssl-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev` (print install command if missing)
+    - **Disk space**: check ≥ 5GB free in working directory (warn if less)
+  - Output a summary table of what's installed / missing / version numbers
+  - Exit 0 if all hard requirements met, exit 1 if any hard requirement missing
+  - Rust is a HARD requirement for this project (Tauri needs it) — if missing, the script prints the install URL and exits 1
+  - Write test: `test_preflight_detects_missing_rust` (mock: remove cargo from PATH, assert script exits 1 with message)
+  - Commit: `chore: environment preflight check script`
+
+  **Must NOT do**:
+  - No installing dependencies automatically (just detect + report)
+  - No feature code
+  - No project scaffold (Task 1)
+
+  **Recommended Agent Profile**:
+  - **Category**: `quick`
+  - **Skills**: []
+
+  **Parallelization**:
+  - **Can Run In Parallel**: NO (first task, blocks everything)
+  - **Parallel Group**: Wave 0
+  - **Blocks**: 1
+  - **Blocked By**: None
+
+  **References**:
+  - **External**: Rust install: `https://rustup.rs/`
+  - **External**: Tauri v2 prerequisites: `https://v2.tauri.app/start/prerequisites/` — lists system deps per OS
+  - **External**: Tauri CLI: `https://v2.tauri.app/start/create-project/`
+
+  **WHY Each Reference Matters**:
+  - Tauri prerequisites: Lists the exact system packages needed on Linux (webkit2gtk, etc.) — without these `cargo build` fails with cryptic errors.
+
+  **Acceptance Criteria**:
+  - [ ] `scripts/preflight.sh` exists and runs on Linux
+  - [ ] `scripts/preflight.ps1` exists and runs on Windows
+  - [ ] Script detects Python, Node, npm, Rust, Tauri CLI presence + versions
+  - [ ] Script exits 1 if Rust or Python or Node missing
+  - [ ] Script warns (but exits 0) if Tauri CLI missing (will be installed in Task 1)
+  - [ ] Script checks Linux system deps and prints install command if missing
+  - [ ] `test_preflight_detects_missing_rust` test passes
+
+  **QA Scenarios**:
+  ```
+  Scenario: Preflight detects all tools present
+    Tool: Bash
+    Preconditions: Python 3.11+, Node 20+, npm 10+, Rust installed
+    Steps:
+      1. Run `bash scripts/preflight.sh` (Linux) or `pwsh scripts/preflight.ps1` (Windows)
+      2. Assert exit 0
+      3. Assert output contains version numbers for all tools
+    Expected Result: Exit 0, all tools detected
+    Evidence: .sisyphus/evidence/task-0-preflight-pass.txt
+
+  Scenario: Preflight detects missing Rust
+    Tool: Bash
+    Preconditions: Rust not in PATH (mock by removing from PATH)
+    Steps:
+      1. Run `PATH=$(echo $PATH | tr ':' '\n' | grep -v cargo | paste -sd:) bash scripts/preflight.sh`
+      2. Assert exit 1
+      3. Assert output contains "Rust not found" and "https://rustup.rs/"
+    Expected Result: Exit 1, clear error message with install URL
+    Evidence: .sisyphus/evidence/task-0-preflight-no-rust.txt
+
+  Scenario: Preflight detects missing Linux system deps
+    Tool: Bash
+    Preconditions: Linux, webkit2gtk not installed
+    Steps:
+      1. Run `bash scripts/preflight.sh`
+      2. Assert output contains "libwebkit2gtk-4.1-dev" and install command
+    Expected Result: Missing system deps reported with install instructions
+    Evidence: .sisyphus/evidence/task-0-preflight-linux-deps.txt
+  ```
+
+  **Commit**: YES
+  - Message: `chore: environment preflight check script`
+
+---
+
+- [ ] 1. Repo Scaffold + Directory Structure + Git Init + License
+
+  **What to do**:
+  - Run preflight (Task 0) first — abort if it fails
+  - The repo at `/home/derrik/Projects/ai-projects/Ganesh` is already a git repo (initialized by user). Use the existing repo — do NOT re-clone. If working in a fresh environment, clone from `https://github.com/derrikjb/Ganesh.git`.
+  - Create monorepo directory structure:
+    - `backend/` (Python FastAPI sidecar: `main.py` stub, `pyproject.toml`, `tests/`)
+    - `frontend/` (React/TS — scaffolded in Task 4, but create dir now)
+    - `src-tauri/` (Tauri v2 — initialized in Task 4, but create dir now)
+    - `.github/workflows/` (CI — Task 2)
     - `docs/` (NATIVE_DEPS.md placeholder)
-    - `.gitignore` (Python, Node, Rust, Tauri ignores)
-  - Add PolyForm Noncommercial License 1.0.0 as `LICENSE`
-  - Add `README.md` with project description + stack overview
-  - Set up Python project: `pyproject.toml` with pytest, mypy, ruff, dependencies (fastapi, uvicorn, litellm, pydantic, keyring, pyyaml)
-  - Set up frontend: Vite + React + TypeScript + Tailwind CSS + vitest
-  - Set up Tauri: `cargo tauri init` with minimal config (window title "Ganesh", dark theme)
-  - Write tests: `test_project_structure` (verify dirs exist, configs valid)
+    - `scripts/` (preflight from Task 0)
+    - `.gitignore` (Python, Node, Rust, Tauri ignores — see reference)
+  - Add PolyForm Noncommercial License 1.0.0 as `LICENSE`:
+    - Fetch full text from: `https://polyformproject.org/licenses/noncommercial/1.0.0`
+    - Also available at: `https://github.com/polyformproject/polyform-licenses/blob/1.0.0/PolyForm-Noncommercial-1.0.0.md`
+    - Do NOT use a placeholder — fetch the actual full text
+  - Add `README.md` with project description, stack overview, and prerequisites (link to preflight script)
+  - Set up Python project: `backend/pyproject.toml` with:
+    - Build system: `setuptools` or `hatchling`
+    - Dependencies: `fastapi`, `uvicorn[standard]`, `litellm`, `pydantic>=2`, `keyring`, `pyyaml`, `python-multipart`
+    - Dev dependencies: `pytest`, `pytest-asyncio`, `mypy`, `ruff`, `httpx` (for testing FastAPI)
+    - Package name: `ganesh-backend`
+  - Set up frontend scaffold using EXACT command:
+    - `npm create vite@latest frontend -- --template react-ts`
+    - Then: `cd frontend && npm install`
+    - Then install Tailwind CSS v4+ (Vite plugin):
+      - `cd frontend && npm install tailwindcss @tailwindcss/vite`
+      - Add `tailwindcss()` plugin to `vite.config.ts`
+      - Add `@import "tailwindcss";` to `src/index.css`
+    - Then install vitest + testing-library:
+      - `cd frontend && npm install -D vitest @testing-library/react @testing-library/jest-dom jsdom`
+      - Create `vitest.config.ts` with `environment: 'jsdom'`, `globals: true`
+  - Set up Tauri v2 (only if Rust is available — preflight verified this):
+    - `cd frontend && npm install -D @tauri-apps/cli@2.11.4`
+    - `cd frontend && npx tauri init` (or `npm create tauri-app@latest` if starting fresh)
+    - Configure `src-tauri/tauri.conf.json`: window title "Ganesh", 800x600, dark theme
+    - In `src-tauri/Cargo.toml`: pin `tauri = "2.11.5"`
+  - Write tests: `test_project_structure` (verify dirs exist, pyproject.toml parses, package.json valid)
   - Initialize git, make first commit: `chore: scaffold repo + project structure`
 
   **Must NOT do**:
   - No feature code (no chat, no LLM, no memory)
-  - No sidecar logic yet (just empty main.py)
+  - No sidecar logic yet (just empty `main.py` with `if __name__ == "__main__": pass`)
   - No CI yet (Task 2)
+  - Do NOT use placeholder license text — fetch the real PolyForm Noncommercial 1.0.0 text
+  - Do NOT skip the `--template react-ts` flag (vanilla template produces broken React)
 
   **Recommended Agent Profile**:
   - **Category**: `quick`
@@ -314,42 +427,89 @@ Max Concurrent: 6 (Waves 0 & 1)
   **Parallelization**:
   - **Can Run In Parallel**: NO (foundation task)
   - **Parallel Group**: Wave 0
-  - **Blocks**: 2, 3, 4, 5, 6
-  - **Blocked By**: None
+  - **Blocks**: 2, 3, 4, 6
+  - **Blocked By**: 0
 
   **References**:
+  - **External**: Vite scaffold: `https://vitejs.dev/guide/` — command `npm create vite@latest frontend -- --template react-ts`
+  - **External**: Tauri v2 stable: `tauri` crate `2.11.5`, `@tauri-apps/cli` npm `2.11.4` — verified July 2026
   - **External**: Tauri v2 docs: `https://v2.tauri.app/start/create-project/` — project init
+  - **External**: Tailwind CSS v4+ Vite setup: `https://tailwindcss.com/docs/installation/using-vite` — uses `@tailwindcss/vite` plugin, NOT old `tailwind.config.js` + PostCSS pattern
+  - **External**: vitest setup: `https://vitest.dev/guide/` — requires explicit `npm install -D vitest @testing-library/react @testing-library/jest-dom jsdom` + `vitest.config.ts`
+  - **External**: PolyForm Noncommercial 1.0.0: `https://polyformproject.org/licenses/noncommercial/1.0.0` — fetch full text (NO trailing slash)
   - **External**: PyInstaller docs: `https://pyinstaller.org/` — will need .spec in Task 3
-  - **External**: PolyForm Noncommercial: `https://polyformproject.org/licenses/noncommercial/1.0.0/`
+  - **Pattern**: `.gitignore` for Tauri+Python+Node: see `https://github.com/github/gitignore` templates
+
+  **WHY Each Reference Matters**:
+  - Vite template: Without `--template react-ts`, Vite scaffolds a vanilla JS project. ALL downstream React code will fail. This was a real build failure.
+  - Tauri version pin: Tauri v2 went through RCs. Without pinning to `2.11.5` (stable), the executor may pull an RC with breaking API differences.
+  - Tailwind v4: The old `npx tailwindcss init -p` command is deprecated. Tailwind v4 uses the `@tailwindcss/vite` plugin pattern — different setup.
+  - PolyForm URL: The trailing slash variant (`/1.0.0/`) returns 404. Must use no trailing slash.
+  - vitest: Vite does NOT auto-configure vitest. It needs explicit install + config file.
 
   **Acceptance Criteria**:
   - [ ] `test_project_structure` test passes: all directories exist, configs parse
   - [ ] `cd backend && python -m pytest` runs with 0 failures
-  - [ ] `cd frontend && npx vitest run` runs with 0 failures
-  - [ ] `cd src-tauri && cargo check` succeeds
-  - [ ] `LICENSE` file contains PolyForm Noncommercial 1.0.0 text
+  - [ ] `cd frontend && npx vitest run` runs with 0 failures (vitest configured)
+  - [ ] `cd frontend && npx tsc --noEmit` succeeds (React+TS template installed correctly)
+  - [ ] `cd src-tauri && cargo check` succeeds (IF Rust is available — skip if not, note in evidence)
+  - [ ] `LICENSE` file contains full PolyForm Noncommercial 1.0.0 text (first line: "# PolyForm Noncommercial License 1.0.0")
+  - [ ] `frontend/package.json` contains `react`, `react-dom`, `@tailwindcss/vite`, `vitest`, `@testing-library/react`
+  - [ ] `src-tauri/Cargo.toml` contains `tauri = "2.11.5"`
   - [ ] Git repo has initial commit
 
   **QA Scenarios**:
   ```
   Scenario: Project structure is valid
     Tool: Bash
-    Preconditions: Repo cloned, dependencies installed
+    Preconditions: Repo cloned, preflight passed, dependencies installed
     Steps:
-      1. Run `test -d backend && test -d frontend && test -d src-tauri && test -d .github/workflows`
-      2. Run `cd backend && python -c "import pyproject.toml"` or verify pyproject.toml parses
+      1. Run `test -d backend && test -d frontend && test -d src-tauri && test -d .github/workflows && test -d docs && test -d scripts`
+      2. Run `cd backend && python -c "import tomllib; tomllib.load(open('pyproject.toml','rb'))"`
       3. Run `cd frontend && npx tsc --noEmit`
-      4. Run `cd src-tauri && cargo check`
+      4. Run `cd src-tauri && cargo check` (skip if Rust not available, note in evidence)
     Expected Result: All commands exit 0
     Evidence: .sisyphus/evidence/task-1-project-structure.txt
 
-  Scenario: License file present
+  Scenario: Frontend is React+TS (not vanilla)
     Tool: Bash
     Steps:
-      1. Run `head -5 LICENSE`
-      2. Assert output contains "PolyForm Noncommercial"
-    Expected Result: Output contains "PolyForm Noncommercial License"
+      1. Run `cat frontend/package.json | grep react`
+      2. Assert output contains "react" and "react-dom" and "@types/react"
+      3. Run `test -f frontend/src/App.tsx`
+      4. Assert file exists (vanilla template would have App.js, not App.tsx)
+    Expected Result: React + TypeScript properly scaffolded
+    Evidence: .sisyphus/evidence/task-1-frontend-react-ts.txt
+
+  Scenario: License file is real PolyForm text
+    Tool: Bash
+    Steps:
+      1. Run `head -3 LICENSE`
+      2. Assert output contains "PolyForm Noncommercial License"
+      3. Run `wc -l LICENSE`
+      4. Assert line count > 50 (not a placeholder)
+    Expected Result: Full license text, not a placeholder
     Evidence: .sisyphus/evidence/task-1-license.txt
+
+  Scenario: Tauri version pinned
+    Tool: Bash
+    Steps:
+      1. Run `grep 'tauri = ' src-tauri/Cargo.toml`
+      2. Assert output contains "2.11.5"
+    Expected Result: Stable version pinned, not RC
+    Evidence: .sisyphus/evidence/task-1-tauri-version.txt
+
+  Scenario: Tailwind v4 Vite plugin installed (not old PostCSS pattern)
+    Tool: Bash
+    Steps:
+      1. Run `cat frontend/package.json | grep tailwind`
+      2. Assert output contains "@tailwindcss/vite"
+      3. Run `grep tailwindcss frontend/vite.config.ts`
+      4. Assert output contains "tailwindcss()" (plugin import)
+      5. Run `grep 'import.*tailwindcss' frontend/src/index.css`
+      6. Assert output contains '@import "tailwindcss"'
+    Expected Result: Tailwind v4 Vite plugin pattern, not old PostCSS
+    Evidence: .sisyphus/evidence/task-1-tailwind-v4.txt
   ```
 
   **Commit**: YES
@@ -363,11 +523,11 @@ Max Concurrent: 6 (Waves 0 & 1)
   **What to do**:
   - Create `.github/workflows/ci.yml` with matrix strategy:
     - `os: [windows-latest, ubuntu-latest]`
-    - Steps: checkout, setup Python 3.11+, setup Node 20+, setup Rust, install deps, run pytest, run vitest, run `cargo check`
+    - Steps: checkout, setup Python 3.11+, setup Node 20+, setup Rust (dtolnay/rust-toolchain action), install deps, run preflight, run pytest, run vitest, run `cargo check` (if src-tauri exists)
   - Create `.github/workflows/build.yml` (triggered on tag push):
     - Same matrix, builds PyInstaller sidecar + Tauri app, uploads artifacts
   - Add caching for pip, npm, cargo
-  - Write test: verify workflow YAML is valid (parse with `python -c "import yaml; yaml.safe_load(...)"`)
+  - Write test: verify workflow YAML is valid (parse with `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"` — requires `pyyaml` installed)
   - Commit: `chore(ci): add GitHub Actions matrix (win + linux)`
 
   **Must NOT do**:
@@ -428,10 +588,23 @@ Max Concurrent: 6 (Waves 0 & 1)
     - `/shutdown` endpoint for graceful termination
     - SIGTERM/SIGINT handler for clean exit
   - Create `backend/pyinstaller.spec`:
-    - Custom spec with `collect_dynamic_libs` + `hiddenimports` placeholder
+    - Custom spec using `collect_all()` and `collect_dynamic_libs()` from PyInstaller utils
     - Entry point: `main.py`
     - `--onefile` mode
     - Include data files (config templates)
+    - Initial deps to collect (NONE are installed yet — these are TEMPLATE entries for when deps are added in later waves):
+      ```python
+      from PyInstaller.utils.hooks import collect_all, collect_dynamic_libs, collect_submodules
+
+      # Template entries — uncomment/add as deps are introduced in later waves:
+      # faster-whisper (Wave 2, Task 15): collect_all('faster_whisper') + collect_all('ctranslate2')
+      # piper-tts (Wave 2, Task 16): collect_all('piper') + collect_dynamic_libs('onnxruntime')
+      # lancedb (Wave 1, Task 10): collect_submodules('lancedb') + collect_dynamic_libs('pyarrow')
+      # mem0ai (Wave 1, Task 10): collect_all('mem0ai')
+      # pydantic v2 (Wave 0): collect_submodules('pydantic') + hiddenimports=['pydantic_core']
+      # keyring (Wave 1, Task 13): collect_all('keyring')
+      ```
+    - Each time a native dep is added in a later task, the executor MUST update this .spec AND `NATIVE_DEPS.md`
   - Create `docs/NATIVE_DEPS.md` — registry of native Python deps to track for PyInstaller
   - Write tests (TDD):
     - `test_health_endpoint` — GET /health returns 200 + {"status":"ok"}
@@ -472,8 +645,8 @@ Max Concurrent: 6 (Waves 0 & 1)
   - [ ] CORS headers include `tauri://localhost` and `https://tauri.localhost`
   - [ ] App binds to ephemeral port (port 0) and writes actual port to stdout
   - [ ] `/shutdown` endpoint triggers graceful uvicorn shutdown
-  - [ ] `pyinstaller backend/pyinstaller.spec` produces a runnable binary
-  - [ ] `NATIVE_DEPS.md` exists with initial registry
+  - [ ] `pyinstaller backend/pyinstaller.spec` produces a runnable binary that starts and responds to `GET /health`
+  - [ ] `NATIVE_DEPS.md` exists with initial registry (template entries for future deps)
 
   **QA Scenarios**:
   ```
@@ -531,6 +704,11 @@ Max Concurrent: 6 (Waves 0 & 1)
     - Product name, identifier (`com.ganesh.desktop`), version 0.1.0
     - Frontend dist path: `../frontend/dist`
     - Security: CSP allowing `connect-src` to `http://127.0.0.1:*` (for sidecar)
+  - Configure `src-tauri/Cargo.toml`:
+    - `tauri = { version = "2.11.5", features = ["tray-icon"] }` — tray is a FEATURE FLAG on the core crate, NOT a separate plugin
+    - `tauri-plugin-global-shortcut = "2"` (for global hotkey, Task 14)
+    - `tauri-plugin-single-instance = "2"` (for single-instance lock)
+    - Do NOT use `tauri-plugin-tray` or `tauri-plugin-system-tray` — these do NOT exist. Tray functionality is built into the core `tauri` crate via the `tray-icon` feature.
   - Implement `src-tauri/src/main.rs`:
     - Spawn Python sidecar binary as child process (using Tauri sidecar API or `Command::new`)
     - Read port from sidecar stdout
@@ -541,7 +719,7 @@ Max Concurrent: 6 (Waves 0 & 1)
     - `App.tsx` with minimal layout (header, main area, footer)
     - `api.ts` — Tauri command to get sidecar port + fetch wrapper
     - `useSidecar.ts` hook — health check on mount, reconnect logic
-    - Dark theme Tailwind config
+    - Dark theme via Tailwind (already configured in Task 1)
   - Write tests:
     - Rust: `test_sidecar_spawn` (mock sidecar, verify spawn + port read)
     - Rust: `test_shutdown` (verify SIGTERM sent on exit)
@@ -558,7 +736,7 @@ Max Concurrent: 6 (Waves 0 & 1)
   - **Skills**: []
 
   **Parallelization**:
-  - **Can Run In Parallel**: NO (depends on Task 3 sidecar binary)
+  - **Can Run In Parallel**: NO (depends on Task 3 sidecar code — the FastAPI app + /health endpoint must exist so Tauri can spawn it. In dev, Tauri spawns `python backend/main.py` directly, NOT the PyInstaller frozen binary.)
   - **Parallel Group**: Wave 0
   - **Blocks**: 5, 7, 9, 14
   - **Blocked By**: 1, 3
@@ -566,9 +744,10 @@ Max Concurrent: 6 (Waves 0 & 1)
   **References**:
   - **Pattern**: `dieharders/example-tauri-v2-python-server-sidecar` — Rust sidecar spawn + lifecycle
   - **External**: Tauri v2 sidecar: `https://v2.tauri.app/develop/sidecar/`
+  - **External**: Tauri v2 system tray: `https://v2.tauri.app/learn/system-tray/` — tray is a feature flag (`features = ["tray-icon"]`), NOT a plugin crate
   - **External**: Tauri single-instance plugin: `https://v2.tauri.app/plugin/single-instance/`
   - **External**: Tauri CSP config: `https://v2.tauri.app/security/csp/`
-  - **External**: Tailwind dark mode: `https://tailwindcss.com/docs/dark-mode`
+  - **External**: Tauri v2 stable: `tauri` crate `2.11.5`, `@tauri-apps/cli` npm `2.11.4` (verified July 2026)
 
   **WHY Each Reference Matters**:
   - Sidecar pattern: Shows how Rust spawns, monitors, and shuts down the Python process. Critical for avoiding orphaned uvicorn processes.
@@ -627,17 +806,21 @@ Max Concurrent: 6 (Waves 0 & 1)
 - [ ] 5. Playwright Integration Test Layer (Real App + Stub LLM)
 
   **What to do**:
-  - Set up Playwright with Tauri WebDriver (or Tauri's built-in test mode):
-    - `playwright.config.ts` configured for Tauri app testing
-    - Test fixture: stub LLM endpoint (mock FastAPI route that returns canned responses)
-    - Test fixture: clean state (no persisted memory, fresh config)
+  - Set up Playwright with Tauri WebDriver for integration testing:
+    - Install `tauri-driver` binary (cargo install tauri-driver or download prebuilt)
+    - Configure Playwright to use Tauri's WebDriver protocol (not standard browser)
+    - `playwright.config.ts` with WebDriver capability for Tauri
+    - Alternative if Tauri WebDriver is complex: use Playwright against the frontend dev server (Vite) with a stub sidecar running on a known port — this tests frontend logic without the full Tauri binary
+  - Test fixture: stub LLM endpoint (mock FastAPI route returning canned responses)
+  - Test fixture: clean state (no persisted memory, fresh config)
   - Create integration tests:
-    - `test_app_launch` — app launches, sidecar healthy, window visible
-    - `test_sidecar_restart` — kill sidecar, verify frontend shows reconnecting state, auto-restart
+    - `test_app_launch` — app launches (or dev server starts), sidecar healthy, UI renders
+    - `test_sidecar_restart` — kill sidecar, verify frontend shows reconnecting state
     - `test_cors` — frontend can fetch from sidecar (no CORS errors in console)
   - Create test helpers:
     - `waitForSidecar(port)` — poll /health until ok
     - `startStubLLM()` — start mock LLM server returning canned responses
+    - `startStubSidecar(port)` — start a minimal FastAPI stub on a fixed port for testing
   - Commit: `test: add Playwright integration test layer`
 
   **Must NOT do**:
@@ -655,15 +838,17 @@ Max Concurrent: 6 (Waves 0 & 1)
   - **Blocked By**: 4
 
   **References**:
-  - **External**: Tauri WebDriver: `https://v2.tauri.app/develop/tests/webdriver/`
+  - **External**: Tauri WebDriver: `https://v2.tauri.app/develop/tests/webdriver/` — requires `tauri-driver` binary
+  - **External**: tauri-driver install: `cargo install tauri-driver` or prebuilt binary
   - **External**: Playwright config: `https://playwright.dev/docs/test-configuration`
   - **External**: Tauri testing guide: `https://v2.tauri.app/develop/tests/`
+  - **Fallback pattern**: If Tauri WebDriver is too complex for CI, test frontend via Vite dev server + stub FastAPI sidecar on a fixed port (e.g., 18008). This tests frontend logic without the full Tauri binary. Full app integration tested in Final Verification (F3).
 
   **Acceptance Criteria**:
   - [ ] `npx playwright test` runs and passes 3 integration tests
   - [ ] Stub LLM fixture works (canned responses served)
-  - [ ] Test helpers (`waitForSidecar`, `startStubLLM`) are reusable
-  - [ ] Tests run in CI (added to workflow in Task 2)
+  - [ ] Test helpers (`waitForSidecar`, `startStubLLM`, `startStubSidecar`) are reusable
+  - [ ] Playwright config added to CI workflow (update `.github/workflows/ci.yml` from Task 2)
 
   **QA Scenarios**:
   ```
@@ -705,9 +890,11 @@ Max Concurrent: 6 (Waves 0 & 1)
     - Future deps to add later: `faster-whisper`, `piper-tts`, `lancedb`, `sounddevice`
   - Add CI step in `.github/workflows/ci.yml`:
     - Build PyInstaller binary (using spec from Task 3)
-    - Run subprocess: `./dist/ganesh-sidecar -c "import fastapi, uvicorn, litellm, pydantic, keyring"`
-    - Fail CI if any ImportError
-  - Add test: `test_native_deps_import` — runs inside frozen binary, asserts all deps importable
+    - Run frozen binary with a health check: `./dist/ganesh-sidecar &` then `curl http://127.0.0.1:$PORT/health`
+    - Alternatively, run: `./dist/ganesh-sidecar --check-imports` where `--check-imports` is a custom CLI flag in `main.py` that imports all registered native deps and exits 0/1
+    - Add `--check-imports` flag to `backend/main.py`: when passed, imports `fastapi, uvicorn, litellm, pydantic, keyring` (and future deps as added), prints success/failure, exits 0/1
+    - Fail CI if any ImportError or if health check fails
+  - Add test: `test_native_deps_import` — runs `python -c "import fastapi, uvicorn, litellm, pydantic, keyring"` and asserts exit 0
   - Commit: `docs: NATIVE_DEPS registry + CI native dep check`
 
   **Must NOT do**:
@@ -744,6 +931,18 @@ Max Concurrent: 6 (Waves 0 & 1)
       3. Assert exit 0
     Expected Result: All native deps importable inside frozen binary
     Evidence: .sisyphus/evidence/task-6-native-deps.txt
+
+  Scenario: Frozen binary starts and responds to health check
+    Tool: Bash
+    Preconditions: PyInstaller binary built
+    Steps:
+      1. Run: `./dist/ganesh-sidecar &`
+      2. Read port from stdout
+      3. `curl -s http://127.0.0.1:$PORT/health`
+      4. Assert `{"status":"ok"}`
+      5. Kill sidecar
+    Expected Result: Frozen binary functional
+    Evidence: .sisyphus/evidence/task-6-frozen-health.txt
   ```
 
   **Commit**: YES
@@ -770,7 +969,7 @@ Max Concurrent: 6 (Waves 0 & 1)
   **Parallelization**: YES (with Tasks 8, 10, 11, 12, 13, 14) | Wave 1 | Blocks: 9, 18, 19, 21 | Blocked By: 4
 
   **References**:
-  - **External**: Tailwind dark mode: `https://tailwindcss.com/docs/dark-mode`
+  - **External**: Tailwind CSS v4 dark mode: `https://tailwindcss.com/docs/dark-mode` — note: Tailwind v4 uses CSS `@media (prefers-color-scheme: dark)` or manual class strategy via `@variant dark`
   - **External**: CSS custom properties: `https://developer.mozilla.org/en-US/docs/Web/CSS/--*`
 
   **Acceptance Criteria**:
@@ -798,7 +997,9 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **What to do**:
   - Create `backend/chat.py`: `POST /chat` accepting `{message, conversation_id}`, using LiteLLM with OpenAI provider (default `gpt-4o-mini`), streaming via SSE
-  - Create `backend/llm_router.py`: LiteLLM wrapper with config-driven provider, API key from OS keyring (stub with env var for now), streaming via `litellm.acompletion(stream=True)`
+  - Create `backend/llm_router.py`: LiteLLM wrapper with config-driven provider selection
+    - API key retrieval: try OS keyring first (`keyring.get("ganesh", "api_key_openai")`), fall back to `OPENAI_API_KEY` env var for dev/testing
+    - Streaming via `litellm.acompletion(stream=True)`
   - Error handling: 401 (invalid key), 429 (rate limit), 500 (LLM error)
   - Conversation context: stub (retrieve last N messages — Task 10 integration later)
   - Write tests (TDD): `test_chat_endpoint`, `test_chat_streaming`, `test_chat_error_401`, `test_chat_error_429`, `test_llm_router_config`
@@ -810,7 +1011,7 @@ Max Concurrent: 6 (Waves 0 & 1)
   - **Category**: `deep` — core AI logic
   - **Skills**: []
 
-  **Parallelization**: YES (with Tasks 7, 10, 11, 12, 13, 14) | Wave 1 | Blocks: 9, 28 | Blocked By: 3, 6
+  **Parallelization**: YES (with Tasks 7, 10, 11, 12, 13, 14) | Wave 1 | Blocks: 9, 28 | Blocked By: 3 (sidecar), 13 (config — but can stub with env var if 13 not done yet)
 
   **References**:
   - **External**: LiteLLM docs: `https://docs.litellm.ai/docs/` — completion, streaming, provider config
@@ -869,6 +1070,7 @@ Max Concurrent: 6 (Waves 0 & 1)
   - **Pattern**: Task 7 tokens — use CSS custom properties for styling
   - **External**: react-markdown: `https://github.com/remarkjs/react-markdown`
   - **External**: SSE in browser: `https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events`
+  - **Note**: Tauri webview origin (`tauri://localhost` or `https://tauri.localhost`) fetching `http://127.0.0.1:$PORT` may face mixed-content or CORS issues. Use `fetch()` with streaming response body parsing (ReadableStream) instead of `EventSource` if EventSource fails, OR configure Tauri's `allowedUrls`/CSP to permit the sidecar origin (configured in Task 4).
 
   **Acceptance Criteria**:
   - [ ] `vitest` passes (4 component tests)
@@ -915,7 +1117,7 @@ Max Concurrent: 6 (Waves 0 & 1)
   - Create `backend/memory_config.py`: mem0 config with LanceDB vector config, embedding model config, storage path
   - Integrate with chat: retrieve relevant memories before LLM call, optionally store new facts after response
   - Write tests (TDD): `test_store_memory`, `test_search_memory`, `test_update_memory`, `test_delete_memory`, `test_invalidate_memory`, `test_memory_isolation` (user A ≠ user B), `test_memory_persistence` (survives restart)
-  - Update NATIVE_DEPS.md: add `mem0`, `lancedb`, `sentence-transformers`
+  - Update NATIVE_DEPS.md: add `mem0ai` (PyPI package name, imported as `mem0`), `lancedb`, `sentence-transformers`
   - Commit: `feat(memory): mem0 + LanceDB with explicit mutation APIs`
 
   **Must NOT do**: No profiles yet (Task 31), no bridge memory (Task 31), no personality (Task 30), no session continuity (Task 33)
@@ -924,11 +1126,11 @@ Max Concurrent: 6 (Waves 0 & 1)
   - **Category**: `deep` — complex memory architecture
   - **Skills**: []
 
-  **Parallelization**: YES (with Tasks 7, 8, 11, 12, 13, 14) | Wave 1 | Blocks: 27, 31, 33, 35 | Blocked By: 3, 6
+  **Parallelization**: YES (with Tasks 7, 8, 11, 12, 13, 14) | Wave 1 | Blocks: 27, 31, 33, 35 | Blocked By: 3
 
   **References**:
   - **External**: mem0 docs: `https://docs.mem0.ai/` — add, search, update, delete, invalidate APIs
-  - **External**: mem0 OSS: `https://github.com/mem0ai/mem0` — local config, LanceDB backend
+  - **External**: mem0 OSS GitHub: `https://github.com/mem0ai/mem0` — PyPI package is `mem0ai`, imported as `import mem0`
   - **External**: LanceDB Python: `https://lancedb.github.io/lancedb/` — embedded vector store
   - **External**: Ollama embeddings: `https://ollama.com/blog/embedding-models`
 
@@ -1003,7 +1205,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **Recommended Agent Profile**:
   - **Category**: `unspecified-high` | **Skills**: []
-  - **Parallelization**: YES (with 7, 8, 10, 12, 13, 14) | Wave 1 | Blocks: None | Blocked By: 3, 6
+  - **Parallelization**: YES (with 7, 8, 10, 12, 13, 14) | Wave 1 | Blocks: None | Blocked By: 3
 
   **References**:
   - **External**: LiteLLM function calling: `https://docs.litellm.ai/docs/function_calling`
@@ -1050,7 +1252,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **Recommended Agent Profile**:
   - **Category**: `unspecified-high` | **Skills**: []
-  - **Parallelization**: YES (with 7, 8, 10, 11, 13, 14) | Wave 1 | Blocks: None | Blocked By: 3, 6
+  - **Parallelization**: YES (with 7, 8, 10, 11, 13, 14) | Wave 1 | Blocks: None | Blocked By: 3
 
   **References**:
   - **External**: duckduckgo-search: `https://github.com/deedy5/duckduckgo_search`
@@ -1079,7 +1281,40 @@ Max Concurrent: 6 (Waves 0 & 1)
 - [ ] 13. Config System (YAML Settings + JSON) + OS Keyring for API Keys
 
   **What to do**:
-  - Create `backend/config.py`: Load `~/.ganesh/config.yaml` (create default if not exists), pydantic schema (llm_provider, llm_model, voice settings, theme, memory config, ollama_url)
+  - Create `backend/config.py`: Load `~/.ganesh/config.yaml` (create default if not exists), pydantic schema with ALL config fields used across the project:
+    ```yaml
+    llm:
+      provider: openai  # openai | anthropic | google | openrouter | local
+      model: gpt-4o-mini
+      local:
+        base_url: http://localhost:11434/v1
+        model: llama3
+    voice:
+      stt_provider: faster-whisper  # faster-whisper | deepgram | openai
+      tts_provider: piper  # piper | elevenlabs | openai
+      activation_mode: push-to-talk  # push-to-talk | wake-word | vad
+    memory:
+      embedding_model: nomic-embed-text
+      ollama_url: http://localhost:11434
+    personality:
+      traits:
+        formality: 0.0
+        verbosity: 0.0
+        warmth: 0.5
+        humor: 0.3
+        assertiveness: 0.0
+      locked: []
+    ui:
+      theme: dark
+      natural_pacing: true
+      pacing_speed: 1.0
+      text_only_mode: false
+    models:
+      downloaded: false
+    update:
+      channel: stable
+      auto_check: true
+    ```
   - Endpoints: `GET /config` (redacted, no secrets), `PUT /config` (validate + persist), `GET /config/keys/{provider}` (boolean exists, never key), `POST /config/keys/{provider}` (store in keyring), `DELETE /config/keys/{provider}` (remove)
   - Use `keyring` library: service `ganesh`, key `api_key_{provider}`
   - Create `frontend/src/components/settings/SettingsPanel.tsx`: config form + API key entry (password fields)
@@ -1091,7 +1326,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **Recommended Agent Profile**:
   - **Category**: `quick` | **Skills**: []
-  - **Parallelization**: YES (with 8, 10, 11, 12, 14) | Wave 1 | Blocks: 8, 28 | Blocked By: 1, 3, 6
+  - **Parallelization**: YES (with 8, 10, 11, 12, 14) | Wave 1 | Blocks: 8, 28 | Blocked By: 3
 
   **References**:
   - **External**: keyring: `https://pypi.org/project/keyring/`
@@ -1132,22 +1367,26 @@ Max Concurrent: 6 (Waves 0 & 1)
 - [ ] 14. Single-Instance Lock + System Tray + Global Hotkey
 
   **What to do**:
-  - System tray (Tauri `tauri-plugin-tray`): icon with context menu (Show/Hide, Settings, Quit), click toggles window
-  - Global hotkey (Tauri `tauri-plugin-global-shortcut`): default `Ctrl+Shift+G` (configurable), toggles visibility, conflict detection
+  - System tray (Tauri core feature, NOT a plugin — enable via `features = ["tray-icon"]` on the `tauri` crate, already done in Task 4):
+    - Use `tauri::tray::TrayIconBuilder` in Rust to create tray icon with context menu (Show/Hide, Settings, Quit)
+    - Click on tray icon toggles window visibility
+  - Global hotkey (`tauri-plugin-global-shortcut` crate):
+    - Default: `Ctrl+Shift+G` (configurable), toggles visibility, conflict detection
   - Close button minimizes to tray (configurable), `RunEvent::ExitRequested` confirms quit vs minimize
   - Frontend: SettingsPanel gets hotkey config field + tray behavior toggle
   - Write tests: `test_single_instance`, `test_tray_icon`, `test_hotkey_toggle`
   - Commit: `feat(ui): system tray + global hotkey + single-instance lock`
 
-  **Must NOT do**: No custom tray icon design, no macOS
+  **Must NOT do**: No custom tray icon design, no macOS, do NOT use `tauri-plugin-tray` (does not exist — tray is a core feature flag)
 
   **Recommended Agent Profile**:
   - **Category**: `unspecified-high` | **Skills**: []
   - **Parallelization**: YES (with 8, 10, 11, 12, 13) | Wave 1 | Blocks: None | Blocked By: 4
 
   **References**:
-  - **External**: Tauri tray: `https://v2.tauri.app/plugin/system-tray/`
-  - **External**: Tauri global shortcut: `https://v2.tauri.app/plugin/global-shortcut/`
+  - **External**: Tauri v2 system tray: `https://v2.tauri.app/learn/system-tray/` — uses `TrayIconBuilder`, NOT a plugin crate
+  - **External**: Tauri global shortcut: `https://v2.tauri.app/plugin/global-shortcut/` — crate `tauri-plugin-global-shortcut`
+  - **External**: Tauri single-instance: `https://v2.tauri.app/plugin/single-instance/` — crate `tauri-plugin-single-instance`
 
   **Acceptance Criteria**:
   - [ ] Tray icon visible with menu, `Ctrl+Shift+G` toggles window, hotkey configurable, single-instance prevents double launch
@@ -1184,12 +1423,14 @@ Max Concurrent: 6 (Waves 0 & 1)
   - Model path: `~/.ganesh/models/whisper/` (downloaded on first use, Task 22)
   - Register as LLM tool: `transcribe_audio(audio_path)`
   - Write tests (TDD): `test_stt_local` (fixture WAV → transcript), `test_stt_fallback` (mock cloud), `test_stt_no_audio` (400 error)
+    - **Fixture WAV generation**: Use Python's `wave` + `struct` modules to generate a synthetic test WAV, OR use `pytest` fixture with `torchaudio`/`soundfile` to synthesize speech-like audio. For CI without audio hardware, mock the STT model and test the API endpoint logic, not the model output.
+    - For end-to-end STT accuracy tests: download a known sample WAV (e.g., from `https://github.com/openai/whisper/raw/main/tests/jfk.flac` or similar public domain audio) and assert transcript contains expected keywords.
   - Update NATIVE_DEPS.md: add `faster-whisper`, `ctranslate2`
   - Commit: `feat(voice): STT with faster-whisper + cloud fallback`
 
   **Must NOT do**: No wake word/VAD (Task 17), no TTS (Task 16), no UI for voice activation
 
-  **Recommended Agent Profile**: `deep` | **Skills**: [] | Wave 2 | Blocks: 17 | Blocked By: 4, 6
+  **Recommended Agent Profile**: `deep` | **Skills**: [] | Wave 2 | Blocks: 17 | Blocked By: 4
 
   **References**:
   - **External**: faster-whisper: `https://github.com/SYSTRAN/faster-whisper`
@@ -1197,18 +1438,20 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **Acceptance Criteria**:
   - [ ] `pytest tests/test_stt.py` → PASS (3 tests)
-  - [ ] POST /voice/stt with fixture WAV returns transcript with Levenshtein ≤ 2 of "hello ganesh"
-  - [ ] Falls back to cloud when local model unavailable
+  - [ ] POST /voice/stt with known fixture audio returns non-empty transcript with expected keywords
+  - [ ] Falls back to cloud when local model unavailable (mock test)
 
   **QA Scenarios**:
   ```
   Scenario: STT transcribes audio file
     Tool: Bash (curl)
+    Preconditions: faster-whisper model downloaded, fixture WAV available
     Steps:
-      1. Prepare fixture WAV with "hello ganesh" spoken
-      2. `curl -F audio=@fixture.wav http://127.0.0.1:$PORT/voice/stt`
-      3. Assert transcript JSON contains "hello ganesh" (fuzzy match, Levenshtein ≤ 2)
-    Expected Result: Accurate transcription
+      1. Download test fixture: `curl -L -o /tmp/test.wav https://github.com/openai/whisper/raw/main/tests/jfk.flac` (or generate synthetic WAV in test setup)
+      2. `curl -F audio=@/tmp/test.wav http://127.0.0.1:$PORT/voice/stt`
+      3. Assert transcript JSON is non-empty
+      4. If using JFK clip: assert transcript contains "nation" or "ask not" (fuzzy match)
+    Expected Result: Accurate transcription of known audio
     Evidence: .sisyphus/evidence/task-15-stt.txt
   ```
 
@@ -1226,11 +1469,12 @@ Max Concurrent: 6 (Waves 0 & 1)
   - Stream audio chunks for low latency
   - Write tests (TDD): `test_tts_local` (text → WAV with valid RIFF header), `test_tts_fallback`, `test_tts_empty_text` (400)
   - Update NATIVE_DEPS.md: add `piper-tts`, `onnxruntime`
+  - Note: PyPI package is `piper-tts`, imported as `piper`. Verify `onnxruntime` native libs collected via `collect_dynamic_libs('onnxruntime')` in PyInstaller spec.
   - Commit: `feat(voice): TTS with Piper + cloud fallback`
 
   **Must NOT do**: No voice activation (Task 17), no visualizer (Task 18)
 
-  **Recommended Agent Profile**: `deep` | **Skills**: [] | Wave 2 | Blocks: 17 | Blocked By: 4, 6
+  **Recommended Agent Profile**: `deep` | **Skills**: [] | Wave 2 | Blocks: 17 | Blocked By: 4
 
   **References**:
   - **External**: Piper TTS: `https://github.com/rhasspy/piper`
@@ -1246,8 +1490,8 @@ Max Concurrent: 6 (Waves 0 & 1)
   Scenario: TTS produces audio
     Tool: Bash (curl)
     Steps:
-      1. `curl -X POST http://127.0.0.1:$PORT/voice/tts -d '{"text":"Hello world"}'`
-      2. Assert Content-Type is audio/wav
+      1. `curl -X POST http://127.0.0.1:$PORT/voice/tts -H "Content-Type: application/json" -d '{"text":"Hello world"}'`
+      2. Assert Content-Type in response is audio/wav
       3. Assert response has RIFF header (bytes 0-3 = "RIFF")
       4. Assert content length > 0
     Expected Result: Valid WAV audio produced
@@ -1262,14 +1506,16 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **What to do**:
   - Create `backend/voice/activation.py`: configurable activation mode
-    - Push-to-talk: frontend sends audio when key held (simplest, MVP default)
-    - Wake word: sherpa-onnx wake word detection (configurable model)
-    - Always-on VAD: sherpa-onnx VAD (voice activity detection), auto-processes on silence
+    - Push-to-talk: frontend captures audio via Web Audio API `MediaRecorder` + `getUserMedia` (requires microphone permission — configure Tauri CSP + permissions for `microphone`), sends audio chunks to sidecar
+    - Wake word: sherpa-onnx wake word detection (configurable model) — runs on backend, frontend streams mic audio via WebSocket
+    - Always-on VAD: sherpa-onnx VAD (voice activity detection) — backend processes audio stream, auto-triggers STT on silence
   - Create `backend/voice/barge_in.py`: barge-in state machine
     - If user speaks while TTS is playing: cancel TTS audio, cancel current LLM stream, process new input
     - States: IDLE → LISTENING → PROCESSING → SPEAKING → (barge-in) → LISTENING
   - Frontend: `VoiceActivation.tsx` — mode switcher (settings), push-to-talk button, mic indicator
-  - Write tests: `test_push_to_talk`, `test_wake_word` (mock), `test_barge_in` (cancel current speech + LLM)
+    - Request microphone permission via `navigator.mediaDevices.getUserMedia({ audio: true })`
+    - Configure Tauri CSP to allow `media-src: 'self'` and microphone access
+  - Write tests: `test_push_to_talk` (mock audio stream), `test_wake_word` (mock), `test_barge_in` (cancel current speech + LLM)
   - Commit: `feat(voice): activation modes + barge-in state machine`
 
   **Must NOT do**: No visualizer (Task 18), no wake word model bundling
@@ -1278,6 +1524,9 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **References**:
   - **External**: sherpa-onnx: `https://github.com/k2-fsa/sherpa-onnx` — VAD + wake word
+  - **External**: Web Audio API getUserMedia: `https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia`
+  - **External**: MediaRecorder API: `https://developer.mozilla.org/en-US/docs/Web/API/MediaRecorder`
+  - **External**: Tauri permissions/CSP: `https://v2.tauri.app/security/csp/` — must allow microphone access in CSP
 
   **Acceptance Criteria**:
   - [ ] Push-to-talk mode works (hold key → record → release → transcribe)
@@ -1511,7 +1760,9 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **References**:
   - **External**: HTTP Range requests: `https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests`
-  - **External**: faster-whisper models: `https://huggingface.co/Systran`
+  - **External**: faster-whisper models: `https://huggingface.co/Systran` — model repo (e.g., `faster-whisper-base` at `https://huggingface.co/Systran/faster-whisper-base`)
+  - **External**: Piper voices: `https://huggingface.co/rhasspy/piper-voices` — voice data files
+  - **External**: Ollama embedding models: `https://ollama.com/library/nomic-embed-text`
 
   **Acceptance Criteria**:
   - [ ] Downloads resume from partial (kill at 50%, restart, continues from 50%)
@@ -1616,7 +1867,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **Must NOT do**: No LangGraph (optional, only if needed later), no sub-agent spawning (Task 25)
 
-  **Recommended Agent Profile**: `deep` | **Skills**: [] | Wave 3 | Blocks: 25 | Blocked By: 3, 6
+  **Recommended Agent Profile**: `deep` | **Skills**: [] | Wave 3 | Blocks: 25 | Blocked By: 3
 
   **References**:
   - **Pattern**: Custom orchestrator from research: `active_tasks: Dict[task_id, {status, goal, current_action, result}]` + `asyncio.create_task()`
@@ -1765,15 +2016,15 @@ Max Concurrent: 6 (Waves 0 & 1)
 
   **What to do**:
   - Create `backend/conversations.py`: conversation persistence
-    - Store conversations in SQLite (`~/.ganesh/data/conversations.db`)
+    - Store conversations + messages in SQLite (`~/.ganesh/data/conversations.db`): `conversations` table (id, title, profile_id, created_at, updated_at), `messages` table (id, conversation_id, role, content, created_at)
     - `POST /conversations` — create new conversation → conversation_id
     - `GET /conversations` — list conversations (id, title, created_at, message_count)
     - `GET /conversations/{id}` — get full conversation with messages
-    - `GET /conversations/search?q={query}` — semantic search across all conversations (using mem0/LanceDB)
+    - `GET /conversations/search?q={query}` — semantic search: embed query via same embedding model as mem0, search against a LanceDB table containing conversation message embeddings (separate from mem0's memory table). Index each message into LanceDB on creation.
     - `POST /conversations/{id}/export` — export as JSON or Markdown
-    - `DELETE /conversations/{id}` — delete conversation
+    - `DELETE /conversations/{id}` — delete conversation + its messages + its LanceDB embeddings
   - Frontend: `ConversationHistory.tsx` — sidebar/panel listing past conversations, search bar, export button, delete
-  - Integrate with chat: each chat session is a conversation, auto-titled (first message summary)
+  - Integrate with chat: each chat session is a conversation, auto-titled (first message summary via LLM or first 50 chars)
   - Write tests: `test_create_conversation`, `test_search_conversations`, `test_export_json`, `test_export_markdown`, `test_delete_conversation`
   - Commit: `feat(history): conversation search + export + delete`
 
@@ -2001,11 +2252,11 @@ Max Concurrent: 6 (Waves 0 & 1)
     - `POST /profiles/{id}/activate` — switch active profile
     - `GET /profiles/active` — get current active profile
   - Create `backend/profiles/bridge.py`: shared bridge memory layer
-    - `POST /profiles/bridge/grant` — grant cross-profile access: `{from_profile, to_profile, memory_id}`
-    - `GET /profiles/bridge/query?from={active}&to={target}&query={semantic_query}` — query another profile's memories with active profile's permission
+    - `POST /profiles/bridge/grant` — grant cross-profile access: `{granting_profile_id, receiving_profile_id, memory_id}`. The granting profile allows the receiving profile to query a specific memory.
+    - `GET /profiles/bridge/query?receiving_profile={active}&granting_profile={target}&query={semantic_query}` — the active (receiving) profile queries the target (granting) profile's memories, if a grant exists
     - `DELETE /profiles/bridge/grant/{grant_id}` — revoke grant
     - Bridge memory is opt-in per memory (not blanket)
-    - Audit log: `bridge_access_log` table (who queried what, when)
+    - Audit log: `bridge_access_log` table (receiving_profile, granting_profile, query, timestamp)
   - Update memory layer (Task 10): all memory operations scoped by profile_id
   - Frontend: `ProfileSwitcher.tsx` — profile dropdown, create/edit/delete, bridge grant management
   - Write tests: `test_create_profile`, `test_profile_isolation` (A's memories not in B), `test_bridge_grant` (A grants → B can query), `test_bridge_revoke`, `test_profile_deletion_cascade`, `test_bridge_audit_log`
@@ -2034,8 +2285,8 @@ Max Concurrent: 6 (Waves 0 & 1)
       1. Create profiles A ("Work") and B ("Personal")
       2. Store memory in A: "Team meeting on Friday at 2pm"
       3. Activate B, query A's memories → assert empty (no grant)
-      4. Grant: POST /profiles/bridge/grant {from: A, to: B, memory_id: <meeting>}
-      5. Query from B: GET /profiles/bridge/query?from=B&to=A&query="meeting schedule"
+      4. Grant: POST /profiles/bridge/grant {"granting_profile_id": "A", "receiving_profile_id": "B", "memory_id": "<meeting>"}
+      5. Query from B: GET /profiles/bridge/query?receiving_profile=B&granting_profile=A&query="meeting schedule"
       6. Assert "Friday at 2pm" in results
     Expected Result: Bridge memory allows cross-profile query with explicit grant
     Evidence: .sisyphus/evidence/task-31-bridge.txt
@@ -2054,8 +2305,8 @@ Max Concurrent: 6 (Waves 0 & 1)
   Scenario: Bridge audit log
     Tool: Bash (curl)
     Steps:
-      1. Grant A→B, query from B to A
-      2. GET /profiles/bridge/audit → assert log entry with from=B, to=A, query, timestamp
+      1. Grant A→B (A grants, B receives), query from B to A
+      2. GET /profiles/bridge/audit → assert log entry with receiving_profile=B, granting_profile=A, query, timestamp
     Expected Result: All bridge access logged
     Evidence: .sisyphus/evidence/task-31-audit.txt
   ```
@@ -2115,14 +2366,14 @@ Max Concurrent: 6 (Waves 0 & 1)
     - On app launch: retrieve last session's context from memory (mem0)
     - Generate "welcome back" message with temporal awareness: "Welcome back! It's been 3 hours. You were working on [last task]. Want to continue?"
     - Uses mem0 long-term memory to recall: last conversation topic, last task, last interaction timestamp
-    - Temporal computation: use monotonic clock for deltas, wall clock only for display (handles NTP jumps, timezone changes)
+    - Temporal computation: store `ended_at` as ISO 8601 UTC wall-clock timestamp in SQLite. On next launch, compute delta as `now_utc - ended_at_utc`. Use `time.time()` (epoch) for deltas to handle timezone changes correctly. Do NOT use `time.monotonic()` for cross-restart deltas (it resets between process lifetimes).
   - Store session metadata in SQLite: `sessions` table (id, profile_id, started_at, ended_at, last_topic, last_task_id)
   - On app quit: save session metadata (last topic from conversation, last task status)
   - Frontend: on launch, if returning session detected, show "welcome back" banner with continuation option
-  - Write tests: `test_welcome_back_message` (assert contains temporal reference + last topic), `test_monotonic_delta` (correct time delta), `test_first_run_no_welcome` (no welcome on first ever launch)
+  - Write tests: `test_welcome_back_message` (assert contains temporal reference + last topic), `test_epoch_delta` (correct time delta via epoch seconds), `test_first_run_no_welcome` (no welcome on first ever launch)
   - Commit: `feat(session): continuity memory with temporal awareness`
 
-  **Concrete Falsifiable Spec**: On launch, if a previous session exists and ended > 5 minutes ago, assistant generates a message containing: (1) a temporal phrase ("X hours/days ago"), (2) a reference to the last conversation topic, (3) an offer to continue. First-ever launch produces no welcome message. Time deltas computed via monotonic clock.
+  **Concrete Falsifiable Spec**: On launch, if a previous session exists and ended > 5 minutes ago (computed via `time.time() - session.ended_at_epoch`), assistant generates a message containing: (1) a temporal phrase ("X hours/days ago"), (2) a reference to the last conversation topic, (3) an offer to continue. First-ever launch produces no welcome message. Time deltas use epoch seconds (`time.time()`), not monotonic clock (which resets between process restarts).
 
   **Must NOT do**: No persistent session state across app reinstall, no "always show welcome" (only on meaningful gap > 5 min)
 
@@ -2134,7 +2385,7 @@ Max Concurrent: 6 (Waves 0 & 1)
   **Acceptance Criteria**:
   - [ ] Returning session (gap > 5 min) shows welcome message with temporal + topic reference
   - [ ] First-ever launch shows no welcome
-  - [ ] Time delta correct (monotonic clock)
+  - [ ] Time delta computed via epoch seconds (correct across restarts)
   - [ ] User can dismiss or accept continuation
 
   **QA Scenarios**:
@@ -2388,12 +2639,12 @@ Max Concurrent: 6 (Waves 0 & 1)
   - Create two PyInstaller build configs:
     - `pyinstaller-minimal.spec`: No models bundled, first-run download (Task 22)
     - `pyinstaller-full.spec`: Pre-bundles whisper base model + piper default voice + embedding model in `dist/models/`
-  - Create Tauri build configs for both variants:
-    - `tauri-minimal.conf.json`: small installer (~50MB)
-    - `tauri-full.conf.json`: larger installer (~500MB-1GB with models)
-  - GitHub Actions: build both variants for Windows + Linux, upload as release artifacts
-  - Update CI workflow: add `build-minimal` and `build-full` jobs
-  - Write tests: `test_minimal_no_models` (no models in dist), `test_full_has_models` (models present)
+  - For Tauri, use a single `tauri.conf.json` but two build scripts:
+    - `scripts/build-minimal.sh` / `scripts/build-minimal.ps1`: builds with minimal PyInstaller spec
+    - `scripts/build-full.sh` / `scripts/build-full.ps1`: builds with full PyInstaller spec, copies models to `dist/models/` before Tauri bundling
+  - GitHub Actions: build both variants for Windows + Linux, upload as separate release artifacts
+  - Update CI workflow: add `build-minimal` and `build-full` jobs (matrix: OS × variant)
+  - Write tests: `test_minimal_no_models` (no .onnx/.bin model files in dist), `test_full_has_models` (models present in dist/models/)
   - Commit: `feat(installer): minimal + full installer variants`
 
   **Must NOT do**: No macOS builds, no model download during build (full variant bundles pre-downloaded)
@@ -2438,7 +2689,8 @@ Max Concurrent: 6 (Waves 0 & 1)
 - [ ] 39. Auto-Update (Tauri Updater Plugin)
 
   **What to do**:
-  - Integrate `tauri-plugin-updater`: checks for updates on launch + manual "Check for Updates" in settings
+  - Integrate `tauri-plugin-updater` (crate `tauri-plugin-updater = "2"`):
+    - checks for updates on launch + manual "Check for Updates" in settings
   - Update flow: download new installer → verify signature → prompt user → install on quit
   - Since sidecar is bundled, update downloads full installer (100MB+ minimal, 500MB+ full)
   - Config: `update.channel` (stable, beta), `update.auto_check` (boolean)
@@ -2558,8 +2810,10 @@ Max Concurrent: 6 (Waves 0 & 1)
     - Minimal installer: warn if > 100MB, fail if > 150MB
     - Full installer: warn if > 1GB, fail if > 1.5GB
   - Add `ast_grep_search` CI step: scan frontend for hardcoded ports
-    - Pattern: `localhost:8008`, `:8008`, `127.0.0.1:8008` (or any hardcoded port)
-    - Fail CI if found (must use ephemeral port from Tauri)
+    - Patterns: `localhost:\d+`, `127.0.0.1:\d+`, `0.0.0.0:\d+` in frontend source files
+    - Exception: allow `127.0.0.1` without port (e.g., in comments/docs), but ANY literal port number is forbidden
+    - Fail CI if any hardcoded port found (must use ephemeral port from Tauri)
+    - Use regex pattern: `(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}` on `frontend/src/**/*.ts` and `frontend/src/**/*.tsx`
   - Add lint step: ruff (Python) + eslint (TS) in CI
   - Add type check: mypy (Python) + tsc --noEmit (TS) in CI
   - Final CI matrix: Windows + Linux, all checks (lint, type, test, build, bundle size, port scan)
@@ -2592,11 +2846,11 @@ Max Concurrent: 6 (Waves 0 & 1)
     Evidence: .sisyphus/evidence/task-41-bundle-size.txt
 
   Scenario: No hardcoded ports in frontend
-    Tool: Bash (ast_grep_search)
+    Tool: Bash (grep)
     Steps:
-      1. Search frontend/src for pattern `localhost:8008` or `:8008`
-      2. Assert no matches found
-    Expected Result: All ports are dynamic
+      1. Run: `grep -rnE '(localhost|127\.0\.0\.1|0\.0\.0\.0):[0-9]{2,5}' frontend/src/`
+      2. Assert no matches found (exit code 1 from grep = no matches = pass)
+    Expected Result: All ports are dynamic (no hardcoded port numbers)
     Evidence: .sisyphus/evidence/task-41-no-hardcoded-ports.txt
   ```
 
@@ -2613,7 +2867,7 @@ Max Concurrent: 6 (Waves 0 & 1)
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
 - [ ] F2. **Code Quality Review** — `unspecified-high`
-  Run `pytest` + `vitest` + `playwright test`. Review all changed files for: `as any`/`@ts-ignore`, empty catches, console.log in prod, commented-out code, unused imports. Check AI slop: excessive comments, over-abstraction, generic names. Verify no hardcoded ports (`ast_grep_search` for `:8008` or `localhost:` literals in frontend). Verify no ML models bundled in minimal installer.
+  Run `pytest` + `vitest` + `playwright test`. Review all changed files for: `as any`/`@ts-ignore`, empty catches, console.log in prod, commented-out code, unused imports. Check AI slop: excessive comments, over-abstraction, generic names. Verify no hardcoded ports (`grep -rnE '(localhost|127\.0\.0\.1|0\.0\.0\.0):[0-9]{2,5}' frontend/src/` returns nothing). Verify no ML models bundled in minimal installer.
   Output: `Build [PASS/FAIL] | Lint [PASS/FAIL] | Tests [N pass/N fail] | Files [N clean/N issues] | VERDICT`
 
 - [ ] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill if UI)
@@ -2654,7 +2908,7 @@ cd frontend && vitest  # Expected: all pass
 playwright test  # Expected: all pass
 
 # Frozen binary native deps
-python -c "import faster_whisper, piper, lancedb, sqlite3"  # via PyInstaller binary, exit 0
+./dist/ganesh-sidecar --check-imports  # Custom flag: imports all registered native deps, exit 0/1
 
 # CI matrix
 # GitHub Actions: windows-latest + ubuntu-latest both green
