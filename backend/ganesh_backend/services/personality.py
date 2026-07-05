@@ -1,22 +1,33 @@
-"""Personality trait matrix with dynamic context-based shifting.
+"""Personality trait matrix with dynamic context-based shifting + persistence.
 
-The PersonalityEngine maintains a set of five traits loaded from the user's
-config.yaml (under ``personality.traits``). Traits are clamped to their valid
-bounds, can be temporarily shifted based on conversation context (session
-scoped, never persisted), locked against shifting, and reset to the config
-baseline. The current trait values are injected into the LLM system prompt via
-``get_system_prompt()``.
+The PersonalityEngine maintains five traits loaded from config.yaml
+(``personality.traits``), optionally overridden by a persisted profile at
+``~/.ganesh/personality.json`` (or ``$GANESH_DATA_DIR/personality.json``).
+
+State layers:
+  - ``_persisted_baseline`` : last saved profile (from disk, or config if no file).
+                              Modified only by ``save()`` / ``load()``.
+  - ``_baseline``           : working profile, modified by ``set_trait``.
+                              What ``save()`` writes to disk.
+  - ``_current``            : baseline + session-scoped context shifts (what the
+                              LLM sees). Shifts never touch ``_baseline``.
+
+``save()`` writes ``_baseline`` + ``_locked`` to disk and promotes it to
+``_persisted_baseline``. ``load()`` reloads from disk, discarding unsaved
+``set_trait`` changes and session shifts. ``reset_traits()`` restores
+``_baseline`` and ``_current`` to ``_persisted_baseline``.
 """
 from __future__ import annotations
 
+import json
+import os
 import re
+from pathlib import Path
 from typing import Any, Mapping
 
 from ganesh_backend.services.config import config_service
 
 
-# Trait bounds: (min, max). Some traits are bipolar [-1.0, 1.0], others are
-# unipolar [0.0, 1.0]. This asymmetry is intentional and matches the spec.
 TRAIT_BOUNDS: dict[str, tuple[float, float]] = {
     "formality": (-1.0, 1.0),
     "verbosity": (-1.0, 1.0),
@@ -25,11 +36,8 @@ TRAIT_BOUNDS: dict[str, tuple[float, float]] = {
     "assertiveness": (-1.0, 1.0),
 }
 
-# Maximum absolute change applied to any single trait during one shift call.
-# Prevents drastic personality swings from a single context signal.
 MUTATION_RATE_CAP = 0.15
 
-# Default baseline traits used when config.yaml has no personality section.
 DEFAULT_BASELINE: dict[str, float] = {
     "formality": 0.0,
     "verbosity": 0.0,
@@ -38,9 +46,10 @@ DEFAULT_BASELINE: dict[str, float] = {
     "assertiveness": 0.0,
 }
 
+PERSISTENCE_FILENAME = "personality.json"
+
 
 def clamp(value: float, low: float, high: float) -> float:
-    """Clamp ``value`` to ``[low, high]``."""
     if value < low:
         return low
     if value > high:
@@ -53,11 +62,15 @@ def _clamp_trait(trait: str, value: float) -> float:
     return clamp(float(value), low, high)
 
 
-# Lightweight context signal heuristics. Each keyword contributes a small
-# nudge to a trait; the aggregate nudge is clamped to ±MUTATION_RATE_CAP and
-# then applied to the current trait value (which is itself clamped to bounds).
-# These are intentionally simple, deterministic rules — Task 35 handles
-# proactive learning from interactions.
+def _default_persistence_path() -> Path:
+    env_dir = os.environ.get("GANESH_DATA_DIR")
+    if env_dir:
+        base = Path(env_dir)
+    else:
+        base = Path.home() / ".ganesh"
+    return base / PERSISTENCE_FILENAME
+
+
 _CASUAL_TOKENS = re.compile(r"\b(hi|hey|yo|sup|cheers|thanks|lol|btw|ok|okay)\b", re.I)
 _FORMAL_TOKENS = re.compile(r"\b(dear|regards|sincerely|please|kindly|furthermore|accordingly)\b", re.I)
 _WARM_TOKENS = re.compile(r"\b(love|great|wonderful|amazing|happy|glad|hope|thank you)\b", re.I)
@@ -71,16 +84,11 @@ _CONCISE_TOKENS = re.compile(r"\b(brief|short|summary|tldr|quick|bullet)\b", re.
 
 
 def _analyze_context(context: Mapping[str, Any]) -> dict[str, float]:
-    """Compute raw trait deltas from conversation context.
-
-    Returns a dict of trait -> delta in [-MUTATION_RATE_CAP, +MUTATION_RATE_CAP].
-    """
     text = ""
     if isinstance(context, dict):
         msg = context.get("message") or context.get("text") or ""
         if isinstance(msg, str):
             text = msg
-        # Task type can bias verbosity: coding/research → more verbose.
         task_type = context.get("task_type") or ""
         if isinstance(task_type, str):
             text = f"{text} {task_type}"
@@ -102,7 +110,6 @@ def _analyze_context(context: Mapping[str, Any]) -> dict[str, float]:
     deltas["humor"] = float(humor - serious)
     deltas["assertiveness"] = float(assertive - deferential)
 
-    # Normalize each delta to [-MUTATION_RATE_CAP, +MUTATION_RATE_CAP].
     for trait in deltas:
         raw = deltas[trait]
         if raw > 0:
@@ -113,18 +120,20 @@ def _analyze_context(context: Mapping[str, Any]) -> dict[str, float]:
 
 
 class PersonalityEngine:
-    """Session-scoped personality trait matrix with dynamic shifting.
+    """Personality trait matrix with persistence and dynamic shifting."""
 
-    Baseline traits are loaded from config.yaml (``personality.traits``).
-    Shifts are kept in-memory only and never written back to config.
-    """
-
-    def __init__(self, config: Any = None) -> None:
-        # Allow injecting a config_service (for testing); default to the global.
+    def __init__(
+        self,
+        config: Any = None,
+        persistence_path: Path | None = None,
+    ) -> None:
         self._config = config if config is not None else config_service
+        self._persistence_path = persistence_path or _default_persistence_path()
         self._baseline: dict[str, float] = self._load_baseline()
-        self._current: dict[str, float] = dict(self._baseline)
         self._locked: set[str] = set(self._load_locked())
+        self._load_persisted_state()
+        self._persisted_baseline: dict[str, float] = dict(self._baseline)
+        self._current: dict[str, float] = dict(self._baseline)
 
     # ---- baseline loading -------------------------------------------------
 
@@ -145,42 +154,102 @@ class PersonalityEngine:
             return []
         return [str(t) for t in locked if t in TRAIT_BOUNDS]
 
+    def _load_persisted_state(self) -> None:
+        try:
+            if not self._persistence_path.exists():
+                return
+            with open(self._persistence_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(data, dict):
+            return
+        traits = data.get("traits", {})
+        if isinstance(traits, dict):
+            for trait in TRAIT_BOUNDS:
+                if trait in traits:
+                    try:
+                        self._baseline[trait] = _clamp_trait(trait, float(traits[trait]))
+                    except (TypeError, ValueError):
+                        pass
+        self._current = dict(self._baseline)
+        locked = data.get("locked", [])
+        if isinstance(locked, list):
+            self._locked = {str(t) for t in locked if t in TRAIT_BOUNDS}
+
+    # ---- persistence ------------------------------------------------------
+
+    def save(self) -> None:
+        self._persistence_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "traits": dict(self._baseline),
+            "locked": sorted(self._locked),
+        }
+        with open(self._persistence_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, sort_keys=True)
+        self._persisted_baseline = dict(self._baseline)
+
+    def load(self) -> None:
+        self._baseline = self._load_baseline()
+        self._locked = set(self._load_locked())
+        self._load_persisted_state()
+        self._persisted_baseline = dict(self._baseline)
+        self._current = dict(self._baseline)
+
+    def get_persistence_path(self) -> Path:
+        return self._persistence_path
+
+    def has_persisted_state(self) -> bool:
+        return self._persistence_path.exists()
+
+    def is_persisted(self) -> bool:
+        return self._persistence_path.exists()
+
+    @property
+    def persistence_path(self) -> Path:
+        return self._persistence_path
+
     # ---- public API -------------------------------------------------------
 
     def get_traits(self) -> dict[str, float]:
-        """Return current trait values (baseline + session shifts)."""
         return dict(self._current)
 
     def get_baseline(self) -> dict[str, float]:
-        """Return the config baseline traits."""
-        return dict(self._baseline)
+        return dict(self._persisted_baseline)
 
-    def set_trait(self, trait: str, value: float) -> float:
-        """Set a trait directly (clamped). Does not persist to config."""
+    def set_trait(self, trait: str, value: float, persist: bool = False) -> float:
         if trait not in TRAIT_BOUNDS:
             raise KeyError(f"Unknown trait: {trait!r}")
         clamped = _clamp_trait(trait, value)
+        self._baseline[trait] = clamped
         self._current[trait] = clamped
+        if persist:
+            self.save()
         return clamped
 
-    def update_traits(self, updates: Mapping[str, float]) -> dict[str, float]:
-        """Update multiple traits at once (clamped). Does not persist."""
+    def update_traits(
+        self, updates: Mapping[str, float], persist: bool = False
+    ) -> dict[str, float]:
         result: dict[str, float] = {}
         for trait, value in updates.items():
             if trait not in TRAIT_BOUNDS:
                 raise KeyError(f"Unknown trait: {trait!r}")
-            result[trait] = self.set_trait(trait, value)
+            result[trait] = self.set_trait(trait, value, persist=persist)
         return result
 
-    def lock_trait(self, trait: str) -> None:
+    def lock_trait(self, trait: str, persist: bool = False) -> None:
         if trait not in TRAIT_BOUNDS:
             raise KeyError(f"Unknown trait: {trait!r}")
         self._locked.add(trait)
+        if persist:
+            self.save()
 
-    def unlock_trait(self, trait: str) -> None:
+    def unlock_trait(self, trait: str, persist: bool = False) -> None:
         if trait not in TRAIT_BOUNDS:
             raise KeyError(f"Unknown trait: {trait!r}")
         self._locked.discard(trait)
+        if persist:
+            self.save()
 
     def is_locked(self, trait: str) -> bool:
         return trait in self._locked
@@ -189,23 +258,16 @@ class PersonalityEngine:
         return sorted(self._locked)
 
     def reset_traits(self) -> dict[str, float]:
-        """Restore all traits to the config baseline (clears shifts)."""
-        self._current = dict(self._baseline)
+        self._baseline = dict(self._persisted_baseline)
+        self._current = dict(self._persisted_baseline)
         return dict(self._current)
 
     def shift_traits(self, context: Mapping[str, Any]) -> dict[str, float]:
-        """Apply context-based temporary shifts to current traits.
-
-        Each trait's change is capped at ±MUTATION_RATE_CAP and the resulting
-        value is clamped to the trait's valid bounds. Locked traits are not
-        shifted. Shifts are session-scoped (in-memory only).
-        """
         deltas = _analyze_context(context)
         for trait, delta in deltas.items():
             if trait in self._locked:
                 continue
             current = self._current[trait]
-            # Cap the per-shift mutation.
             capped_delta = clamp(delta, -MUTATION_RATE_CAP, MUTATION_RATE_CAP)
             new_value = _clamp_trait(trait, current + capped_delta)
             self._current[trait] = new_value
@@ -214,11 +276,6 @@ class PersonalityEngine:
     # ---- system prompt ----------------------------------------------------
 
     def get_system_prompt(self) -> str:
-        """Build a system prompt fragment encoding the current trait values.
-
-        The prompt is a concise description of the assistant's current
-        personality, suitable for prepending to an LLM system message.
-        """
         t = self._current
         return (
             "You are Ganesh, a local-first AI assistant. Adapt your tone to the "
@@ -237,6 +294,18 @@ class PersonalityEngine:
         )
 
 
-# Module-level singleton for the router to use. Tests construct their own
-# instances via PersonalityEngine(config=...) with a mocked config service.
 engine = PersonalityEngine()
+
+
+def get_engine() -> PersonalityEngine:
+    return engine
+
+
+def set_engine(eng: PersonalityEngine) -> None:
+    global engine
+    engine = eng
+
+
+def reset_engine() -> None:
+    global engine
+    engine = PersonalityEngine()

@@ -40,6 +40,7 @@ const SAMPLE_PAYLOAD = {
     assertiveness: 0.0,
   },
   locked: ['formality'],
+  persisted: true,
 }
 
 describe('PersonalityPanel', () => {
@@ -89,7 +90,7 @@ describe('PersonalityPanel', () => {
     await waitFor(() => {
       const unlockCall = mockFetch.mock.calls.find(
         ([path, init]) =>
-          path === '/api/personality/unlock/formality' &&
+          path === '/api/personality/unlock/formality?persist=true' &&
           (init as RequestInit)?.method === 'POST',
       )
       expect(unlockCall).toBeDefined()
@@ -116,7 +117,7 @@ describe('PersonalityPanel', () => {
     await waitFor(() => {
       const putCall = mockFetch.mock.calls.find(
         ([path, init]) =>
-          path === '/api/personality/traits' &&
+          path === '/api/personality/traits?persist=true' &&
           (init as RequestInit)?.method === 'PUT',
       )
       expect(putCall).toBeDefined()
@@ -129,6 +130,7 @@ describe('PersonalityPanel', () => {
       traits: SAMPLE_PAYLOAD.baseline,
       baseline: SAMPLE_PAYLOAD.baseline,
       locked: [],
+      persisted: true,
     }
     mockFetch.mockResolvedValueOnce(mockResponse(resetPayload))
 
@@ -147,6 +149,84 @@ describe('PersonalityPanel', () => {
           (init as RequestInit)?.method === 'POST',
       )
       expect(resetCall).toBeDefined()
+    })
+  })
+
+  it('shows persistence status indicator', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(SAMPLE_PAYLOAD))
+
+    render(<PersonalityPanel refreshIntervalMs={99999} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personality-persist-status')).toBeInTheDocument()
+    })
+
+    expect(screen.getByTestId('personality-persist-status').textContent).toBe(
+      'Saved',
+    )
+  })
+
+  it('shows Not saved when persisted is false', async () => {
+    const unsavedPayload = { ...SAMPLE_PAYLOAD, persisted: false }
+    mockFetch.mockResolvedValueOnce(mockResponse(unsavedPayload))
+
+    render(<PersonalityPanel refreshIntervalMs={99999} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personality-persist-status')).toBeInTheDocument()
+    })
+
+    expect(screen.getByTestId('personality-persist-status').textContent).toBe(
+      'Not saved',
+    )
+  })
+
+  it('triggers save via POST /api/personality/save', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(SAMPLE_PAYLOAD))
+    const savedPayload = { ...SAMPLE_PAYLOAD, persisted: true }
+    mockFetch.mockResolvedValueOnce(mockResponse(savedPayload))
+
+    render(<PersonalityPanel refreshIntervalMs={99999} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personality-save')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId('personality-save'))
+
+    await waitFor(() => {
+      const saveCall = mockFetch.mock.calls.find(
+        ([path, init]) =>
+          path === '/api/personality/save' &&
+          (init as RequestInit)?.method === 'POST',
+      )
+      expect(saveCall).toBeDefined()
+    })
+  })
+
+  it('triggers load via POST /api/personality/load', async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(SAMPLE_PAYLOAD))
+    const loadedPayload = {
+      ...SAMPLE_PAYLOAD,
+      traits: { ...SAMPLE_PAYLOAD.traits, formality: 0.5 },
+    }
+    mockFetch.mockResolvedValueOnce(mockResponse(loadedPayload))
+
+    render(<PersonalityPanel refreshIntervalMs={99999} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personality-load')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByTestId('personality-load'))
+
+    await waitFor(() => {
+      const loadCall = mockFetch.mock.calls.find(
+        ([path, init]) =>
+          path === '/api/personality/load' &&
+          (init as RequestInit)?.method === 'POST',
+      )
+      expect(loadCall).toBeDefined()
     })
   })
 

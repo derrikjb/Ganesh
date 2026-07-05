@@ -13,6 +13,7 @@ interface PersonalityPayload {
   traits: PersonalityTraits
   baseline: PersonalityTraits
   locked: string[]
+  persisted: boolean
 }
 
 interface PersonalityPanelProps {
@@ -54,6 +55,7 @@ export function PersonalityPanel({
   const [traits, setTraits] = useState<PersonalityTraits | null>(null)
   const [baseline, setBaseline] = useState<PersonalityTraits | null>(null)
   const [locked, setLocked] = useState<string[]>([])
+  const [persisted, setPersisted] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState<Record<string, boolean>>({})
 
@@ -68,6 +70,7 @@ export function PersonalityPanel({
       setTraits(data.traits)
       setBaseline(data.baseline)
       setLocked(data.locked ?? [])
+      setPersisted(data.persisted ?? false)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -87,7 +90,7 @@ export function PersonalityPanel({
       setTraits(next)
       setSaving((prev) => ({ ...prev, [trait]: true }))
       try {
-        const res = await sidecarFetch('/api/personality/traits', {
+        const res = await sidecarFetch('/api/personality/traits?persist=true', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ traits: { [trait]: value } }),
@@ -100,6 +103,7 @@ export function PersonalityPanel({
           setTraits(data.traits)
           setBaseline(data.baseline)
           setLocked(data.locked ?? [])
+          setPersisted(data.persisted ?? false)
           setError(null)
         }
       } catch (err) {
@@ -118,14 +122,16 @@ export function PersonalityPanel({
       const endpoint = isCurrentlyLocked ? 'unlock' : 'lock'
       setSaving((prev) => ({ ...prev, [`lock-${trait}`]: true }))
       try {
-        const res = await sidecarFetch(`/api/personality/${endpoint}/${trait}`, {
-          method: 'POST',
-        })
+        const res = await sidecarFetch(
+          `/api/personality/${endpoint}/${trait}?persist=true`,
+          { method: 'POST' },
+        )
         if (!res.ok) {
           setError(`status ${res.status}`)
         } else {
           const data = (await res.json()) as PersonalityPayload
           setLocked(data.locked ?? [])
+          setPersisted(data.persisted ?? false)
           setError(null)
         }
       } catch (err) {
@@ -148,12 +154,55 @@ export function PersonalityPanel({
         setTraits(data.traits)
         setBaseline(data.baseline)
         setLocked(data.locked ?? [])
+        setPersisted(data.persisted ?? false)
         setError(null)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving((prev) => ({ ...prev, reset: false }))
+    }
+  }, [])
+
+  const handleSave = useCallback(async () => {
+    setSaving((prev) => ({ ...prev, save: true }))
+    try {
+      const res = await sidecarFetch('/api/personality/save', { method: 'POST' })
+      if (!res.ok) {
+        setError(`status ${res.status}`)
+      } else {
+        const data = (await res.json()) as PersonalityPayload
+        setTraits(data.traits)
+        setBaseline(data.baseline)
+        setLocked(data.locked ?? [])
+        setPersisted(data.persisted ?? false)
+        setError(null)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSaving((prev) => ({ ...prev, save: false }))
+    }
+  }, [])
+
+  const handleLoad = useCallback(async () => {
+    setSaving((prev) => ({ ...prev, load: true }))
+    try {
+      const res = await sidecarFetch('/api/personality/load', { method: 'POST' })
+      if (!res.ok) {
+        setError(`status ${res.status}`)
+      } else {
+        const data = (await res.json()) as PersonalityPayload
+        setTraits(data.traits)
+        setBaseline(data.baseline)
+        setLocked(data.locked ?? [])
+        setPersisted(data.persisted ?? false)
+        setError(null)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSaving((prev) => ({ ...prev, load: false }))
     }
   }, [])
 
@@ -167,6 +216,17 @@ export function PersonalityPanel({
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-text-primary">Personality</h2>
         <div className="flex items-center gap-2">
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded border ${
+              persisted
+                ? 'bg-status-success/10 border-status-success/40 text-status-success'
+                : 'bg-bg-tertiary border-border text-text-muted'
+            }`}
+            data-testid="personality-persist-status"
+            title={persisted ? 'Personality saved to disk' : 'No saved personality file'}
+          >
+            {persisted ? 'Saved' : 'Not saved'}
+          </span>
           <button
             type="button"
             onClick={() => void refresh()}
@@ -280,15 +340,35 @@ export function PersonalityPanel({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => void handleReset()}
-        disabled={saving.reset ?? false}
-        className="mt-2 self-start text-xs text-text-muted hover:text-text-primary disabled:opacity-50"
-        data-testid="personality-reset"
-      >
-        {saving.reset ? 'Resetting…' : 'Reset to baseline'}
-      </button>
+      <div className="flex items-center gap-2 mt-2" data-testid="personality-actions">
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saving.save ?? false}
+          className="text-xs px-3 py-1 rounded border border-border bg-bg-tertiary text-text-primary hover:border-accent disabled:opacity-50"
+          data-testid="personality-save"
+        >
+          {saving.save ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleLoad()}
+          disabled={saving.load ?? false}
+          className="text-xs px-3 py-1 rounded border border-border bg-bg-tertiary text-text-primary hover:border-accent disabled:opacity-50"
+          data-testid="personality-load"
+        >
+          {saving.load ? 'Loading…' : 'Load'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleReset()}
+          disabled={saving.reset ?? false}
+          className="text-xs px-3 py-1 rounded border border-border bg-bg-tertiary text-text-muted hover:text-text-primary disabled:opacity-50"
+          data-testid="personality-reset"
+        >
+          {saving.reset ? 'Resetting…' : 'Reset'}
+        </button>
+      </div>
     </div>
   )
 }
