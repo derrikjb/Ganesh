@@ -1,0 +1,12 @@
+{
+  "active_plan": "/home/derrik/Projects/ai-projects/Ganesh/.sisyphus/plans/ganesh-assistant.md",
+  "started_at": "2026-07-05T01:55:00.724Z",
+  "session_ids": [
+    "ses_0d003901bffe0X25Ws0379SrGI"
+  ],
+  "session_origins": {
+    "ses_0d003901bffe0X25Ws0379SrGI": "direct"
+  },
+  "plan_name": "ganesh-assistant",
+  "agent": "atlas"
+}

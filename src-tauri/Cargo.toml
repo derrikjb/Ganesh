@@ -1,0 +1,22 @@
+[package]
+name = "ganesh"
+version = "0.1.0"
+description = "Ganesh AI Assistant"
+authors = ["Derrik"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = "2.0.0-rc"
+
+[dependencies]
+tauri = { version = "2.0.0-rc", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lib]
+name = "ganesh_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "ganesh"
+path = "src/main.rs"
