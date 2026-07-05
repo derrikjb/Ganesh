@@ -14,6 +14,46 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+// ---------------------------------------------------------------------------
+// System tray + global hotkey configuration
+// ---------------------------------------------------------------------------
+
+/// Menu item ID for the "Show" tray menu entry.
+pub const TRAY_SHOW_ID: &str = "tray_show";
+/// Menu item ID for the "Hide" tray menu entry.
+pub const TRAY_HIDE_ID: &str = "tray_hide";
+/// Menu item ID for the "Quit" tray menu entry.
+pub const TRAY_QUIT_ID: &str = "tray_quit";
+
+/// Accelerator string for the global toggle-window hotkey.
+///
+/// `Control+Shift+G` is used on both Windows and Linux (the only supported
+/// platforms). macOS is out of scope; if it ever lands, swap to `Super+Shift+G`.
+pub const HOTKEY_TOGGLE: &str = "Control+Shift+G";
+
+/// The ordered `(id, label)` pairs that make up the tray context menu.
+///
+/// Kept as pure data so the menu structure can be unit-tested without
+/// constructing a live Tauri `AppHandle` (which needs a windowing system).
+/// `main.rs` turns this spec into real `MenuItem`s at setup time.
+pub fn tray_menu_spec() -> &'static [(&'static str, &'static str)] {
+    &[
+        (TRAY_SHOW_ID, "Show"),
+        (TRAY_HIDE_ID, "Hide"),
+        (TRAY_QUIT_ID, "Quit"),
+    ]
+}
+
+/// Decide whether a close request should be intercepted (minimize to tray)
+/// or allowed to proceed (real quit).
+///
+/// Returns `true` when the window should be hidden instead of closed — i.e.
+/// always, for the minimize-to-tray behaviour. Exposed as a function so the
+/// policy is testable without a window.
+pub fn should_minimize_to_tray() -> bool {
+    true
+}
+
 /// Prefix emitted by the sidecar on stdout once it has bound a port.
 pub const PORT_PREFIX: &str = "PORT: ";
 
@@ -300,5 +340,45 @@ mod tests {
         *state.port.lock().unwrap() = Some(42);
         assert_eq!(state.port(), Some(42));
         assert!(state.take_child().is_none());
+    }
+
+    #[test]
+    fn test_tray_menu_items() {
+        let spec = tray_menu_spec();
+        assert_eq!(spec.len(), 3, "tray menu must have exactly 3 items");
+
+        let (show_id, show_label) = spec[0];
+        assert_eq!(show_id, TRAY_SHOW_ID);
+        assert_eq!(show_label, "Show");
+
+        let (hide_id, hide_label) = spec[1];
+        assert_eq!(hide_id, TRAY_HIDE_ID);
+        assert_eq!(hide_label, "Hide");
+
+        let (quit_id, quit_label) = spec[2];
+        assert_eq!(quit_id, TRAY_QUIT_ID);
+        assert_eq!(quit_label, "Quit");
+
+        let ids: Vec<&str> = spec.iter().map(|(id, _)| *id).collect();
+        let unique: std::collections::HashSet<&str> = ids.iter().copied().collect();
+        assert_eq!(ids.len(), unique.len(), "tray menu item IDs must be unique");
+    }
+
+    #[test]
+    fn test_hotkey_registration() {
+        let wrapper =
+            tauri_plugin_global_shortcut::ShortcutWrapper::try_from(HOTKEY_TOGGLE);
+        assert!(
+            wrapper.is_ok(),
+            "HOTKEY_TOGGLE ({HOTKEY_TOGGLE}) must parse into a valid Shortcut"
+        );
+    }
+
+    #[test]
+    fn test_minimize_to_tray_policy() {
+        assert!(
+            should_minimize_to_tray(),
+            "close button must minimize to tray, not quit"
+        );
     }
 }

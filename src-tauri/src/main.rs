@@ -1,17 +1,16 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use ganesh_lib::{shutdown_sidecar, spawn_sidecar, SidecarState, DEFAULT_SHUTDOWN_TIMEOUT};
+use ganesh_lib::{
+    self as lib, shutdown_sidecar, spawn_sidecar, SidecarState, DEFAULT_SHUTDOWN_TIMEOUT,
+    HOTKEY_TOGGLE, TRAY_HIDE_ID, TRAY_QUIT_ID, TRAY_SHOW_ID,
+};
 use std::path::PathBuf;
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::{
+    image::Image, menu::{Menu, MenuItem}, tray::{MouseButton, TrayIconEvent}, Manager, RunEvent, WindowEvent,
+};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-/// Resolve the sidecar binary path.
-///
-/// In a bundled Tauri app the sidecar lives next to the main executable and
-/// is named `ganesh-backend` (with a platform-specific suffix on Windows). In
-/// dev (or when the bundled binary is absent) we fall back to invoking the
-/// Python source directly so the shell is runnable without a PyInstaller
-/// build.
 fn resolve_sidecar() -> (String, Vec<String>) {
     let exe_dir = std::env::current_exe()
         .ok()
@@ -50,6 +49,64 @@ fn get_sidecar_port(state: tauri::State<'_, SidecarState>) -> Option<u16> {
     state.port()
 }
 
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
+
+fn toggle_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Show", true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, TRAY_HIDE_ID, "Hide", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit", true, None::<&str>)?;
+    Menu::with_items(app, &[&show, &hide, &quit])
+}
+
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let menu = build_tray_menu(app)?;
+    let icon = app.default_window_icon()
+        .cloned()
+        .unwrap_or_else(|| Image::from_path("icons/32x32.png").unwrap());
+    tauri::tray::TrayIconBuilder::with_id("main-tray")
+        .icon(icon)
+        .tooltip("Ganesh")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_SHOW_ID => show_main_window(app),
+            TRAY_HIDE_ID => hide_main_window(app),
+            TRAY_QUIT_ID => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
+                toggle_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
 fn build_app() -> tauri::Builder<tauri::Wry> {
     let state = SidecarState::new();
 
@@ -57,10 +114,7 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_focus();
-                let _ = window.unminimize();
-            }
+            show_main_window(app);
         }))
         .manage(state)
         .invoke_handler(tauri::generate_handler![get_sidecar_port])
@@ -69,13 +123,26 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
             if let Err(e) = spawn_and_store_sidecar(&state) {
                 eprintln!("sidecar spawn failed: {e}");
             }
+
+            build_tray(app.handle())?;
+
+            let global = app.global_shortcut();
+            global.on_shortcut(HOTKEY_TOGGLE, move |app, _shortcut, _event| {
+                toggle_main_window(app);
+            })?;
+
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { .. } = event {
-                let state = window.app_handle().state::<SidecarState>();
-                if let Some(mut child) = state.take_child() {
-                    let _ = shutdown_sidecar(&mut child, DEFAULT_SHUTDOWN_TIMEOUT);
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if lib::should_minimize_to_tray() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                } else {
+                    let state = window.app_handle().state::<SidecarState>();
+                    if let Some(mut child) = state.take_child() {
+                        let _ = shutdown_sidecar(&mut child, DEFAULT_SHUTDOWN_TIMEOUT);
+                    }
                 }
             }
         })
