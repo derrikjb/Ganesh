@@ -42,3 +42,6 @@ backend/:memory:/
 .sisyphus/*
 !.sisyphus/plans/
 !.sisyphus/notepads/
+**/.sisyphus/
+!**/.sisyphus/plans/
+!**/.sisyphus/notepads/
