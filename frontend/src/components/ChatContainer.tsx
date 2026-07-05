@@ -2,7 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { useChat } from '../hooks/useChat'
+import { useAccessibility } from '../contexts/AccessibilityContext'
 import type { ChatMessage as ChatMessageType } from '../types/chat'
+import type { OpenDocument } from '../types/documents'
+
+interface ChatContainerProps {
+  documents: OpenDocument[]
+  onOpenDocument: (file: { name: string; type: string; size: number; content: string }) => void
+}
 
 function StreamingIndicator() {
   return (
@@ -55,8 +62,9 @@ function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-export function ChatContainer() {
+export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const { messages, isStreaming, streamingContent, error, sendMessage, retryLast } = useChat()
+  const { textOnlyMode } = useAccessibility()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
@@ -88,6 +96,16 @@ export function ChatContainer() {
 
   return (
     <div className="flex flex-col h-full">
+      {textOnlyMode && (
+        <div
+          className="px-4 py-2 bg-accent-muted border-b border-accent/30 text-xs text-accent"
+          data-testid="text-only-banner"
+          role="status"
+        >
+          Text-only mode active · voice features disabled
+        </div>
+      )}
+
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
@@ -99,13 +117,36 @@ export function ChatContainer() {
         ) : (
           <>
             {displayMessages.map((message) => (
-              <ChatMessage key={message.id} message={message} />
+              <ChatMessage key={message.id} message={message} onOpenDocument={onOpenDocument} />
             ))}
             {isStreaming && <StreamingIndicator />}
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
+
+      {!textOnlyMode && (
+        <div
+          className="flex items-center justify-between px-4 py-1 border-t border-border bg-bg-secondary text-xs text-text-muted"
+          data-testid="voice-controls"
+        >
+          <span className="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+              <path d="M19 10v2a7 7 0 01-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+            </svg>
+            Voice I/O
+          </span>
+          <button
+            className="text-text-muted hover:text-accent transition-colors"
+            aria-label="Start voice input"
+            data-testid="voice-input-button"
+          >
+            Press to speak
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="px-4 py-2 bg-status-error/10 border-t border-status-error/20">
