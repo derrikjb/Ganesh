@@ -20,3 +20,10 @@
 - Voice: faster-whisper + Piper
 - LLM: LiteLLM routing (OpenAI default)
 - License: PolyForm Noncommercial 1.0.0
+## Wave 0: Foundation
+- Scaffolded project structure with backend (FastAPI), frontend (Vite/React/TS), and src-tauri (Tauri v2).
+- Configured pyproject.toml with required dependencies.
+- Configured package.json with Vitest and Tailwind CSS.
+- Initialized git repository with appropriate .gitignore.
+- Created README.md and LICENSE (PolyForm Noncommercial 1.0.0).
+- Verified directory structure manually.

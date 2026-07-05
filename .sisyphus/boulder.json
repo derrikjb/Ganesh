@@ -8,5 +8,16 @@
     "ses_0d003901bffe0X25Ws0379SrGI": "direct"
   },
   "plan_name": "ganesh-assistant",
-  "agent": "atlas"
+  "agent": "atlas",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "Repo Scaffold + Project Structure + Git Init",
+      "session_id": "ses_0d002a40fffe3WMSsjoJI0ty0T",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-07-05T01:56:56.382Z"
+    }
+  }
 }

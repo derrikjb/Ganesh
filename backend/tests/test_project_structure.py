@@ -1,15 +1,30 @@
 import os
 from pathlib import Path
 
-def test_directories_exist():
+def test_project_directories_exist():
     root = Path(__file__).parent.parent.parent
-    assert (root / "backend").is_dir()
-    assert (root / "frontend").is_dir()
-    assert (root / "src-tauri").is_dir()
-    assert (root / ".github/workflows").is_dir()
-    assert (root / "docs").is_dir()
+    directories = [
+        "backend",
+        "frontend",
+        "src-tauri",
+        ".github/workflows",
+        "docs",
+    ]
+    for dir_name in directories:
+        assert (root / dir_name).is_dir(), f"Directory {dir_name} missing"
 
-def test_backend_files_exist():
-    backend = Path(__file__).parent.parent
-    assert (backend / "main.py").is_file()
-    assert (backend / "pyproject.toml").is_file()
+def test_critical_files_exist():
+    root = Path(__file__).parent.parent.parent
+    files = [
+        "backend/main.py",
+        "backend/pyproject.toml",
+        "frontend/index.html",
+        "frontend/package.json",
+        "frontend/vite.config.ts",
+        "src-tauri/tauri.conf.json",
+        "src-tauri/Cargo.toml",
+        "LICENSE",
+        "README.md",
+    ]
+    for file_path in files:
+        assert (root / file_path).is_file(), f"File {file_path} missing"
