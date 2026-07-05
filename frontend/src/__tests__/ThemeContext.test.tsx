@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext'
 
 function TestConsumer() {
@@ -20,11 +20,13 @@ function TestConsumer() {
 
 describe('ThemeContext', () => {
   beforeEach(() => {
+    cleanup()
     vi.restoreAllMocks()
     localStorage.clear()
   })
 
   afterEach(() => {
+    cleanup()
     localStorage.clear()
   })
 

@@ -62,25 +62,30 @@ if os.path.isdir(_config_templates):
 # --- Future native deps (Wave 2+) ------------------------------------------
 # Uncomment as each dependency is added to pyproject.toml.
 #
-# # faster-whisper (CTranslate2 native runtime)
-# _tmp_datas, _tmp_bins, _tmp_hidden = collect_all("faster_whisper")
-# datas += _tmp_datas; binaries += _tmp_bins; hiddenimports += _tmp_hidden
-# binaries += collect_dynamic_libs("ctranslate2")
-#
-# # piper-tts (ONNX runtime native)
-# _tmp_datas, _tmp_bins, _tmp_hidden = collect_all("piper")
-# datas += _tmp_datas; binaries += _tmp_bins; hiddenimports += _tmp_hidden
-# binaries += collect_dynamic_libs("onnxruntime")
-#
-# # lancedb (Rust native)
-# _tmp_datas, _tmp_bins, _tmp_hidden = collect_all("lancedb")
-# datas += _tmp_datas; binaries += _tmp_bins; hiddenimports += _tmp_hidden
-# binaries += collect_dynamic_libs("lancedb")
+# piper-tts (ONNX runtime native)
+_tmp_datas, _tmp_bins, _tmp_hidden = collect_all("piper")
+datas += _tmp_datas
+binaries += _tmp_bins
+hiddenimports += _tmp_hidden
+binaries += collect_dynamic_libs("onnxruntime")
 #
 # # sounddevice (PortAudio C library)
 # _tmp_datas, _tmp_bins, _tmp_hidden = collect_all("sounddevice")
 # datas += _tmp_datas; binaries += _tmp_bins; hiddenimports += _tmp_hidden
 # binaries += collect_dynamic_libs("sounddevice")
+
+# faster-whisper (CTranslate2 native runtime). Also collect the transitive
+# native libs from ctranslate2 (the C++ inference engine) and onnxruntime
+# (used by faster-whisper for VAD). PyAV (`av`) brings its own ffmpeg libs
+# which collect_dynamic_libs will pull in.
+_tmp_datas, _tmp_bins, _tmp_hidden = collect_all("faster_whisper")
+datas += _tmp_datas
+binaries += _tmp_bins
+hiddenimports += _tmp_hidden
+
+binaries += collect_dynamic_libs("ctranslate2")
+binaries += collect_dynamic_libs("onnxruntime")
+binaries += collect_dynamic_libs("av")
 
 a = Analysis(
     ["main.py"],

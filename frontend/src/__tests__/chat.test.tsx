@@ -1,9 +1,10 @@
 import '@testing-library/jest-dom'
 import '@testing-library/jest-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, renderHook } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, renderHook, cleanup } from '@testing-library/react'
 import { ChatMessage } from '../components/ChatMessage'
 import { ChatInput } from '../components/ChatInput'
+import { AccessibilityProvider } from '../contexts/AccessibilityContext'
 import type { ChatMessage as ChatMessageType, AttachedFile } from '../types/chat'
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -19,6 +20,14 @@ import { sidecarFetch } from '../api'
 
 const mockSidecarFetch = sidecarFetch as ReturnType<typeof vi.fn>
 
+function renderChatInput(props: { onSend: typeof vi.fn; disabled: boolean }) {
+  return render(
+    <AccessibilityProvider>
+      <ChatInput onSend={props.onSend} disabled={props.disabled} />
+    </AccessibilityProvider>,
+  )
+}
+
 function makeMessage(overrides: Partial<ChatMessageType> = {}): ChatMessageType {
   return {
     id: 'test-1',
@@ -31,6 +40,10 @@ function makeMessage(overrides: Partial<ChatMessageType> = {}): ChatMessageType 
 }
 
 describe('ChatMessage', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   it('renders user message right-aligned with accent background', () => {
     const userMsg = makeMessage({ role: 'user', content: 'User says hi' })
     render(<ChatMessage message={userMsg} />)
@@ -93,18 +106,19 @@ describe('ChatInput', () => {
   })
 
   afterEach(() => {
+    cleanup()
     vi.restoreAllMocks()
   })
 
   it('renders textarea and send button', () => {
-    render(<ChatInput onSend={mockOnSend} disabled={false} />)
+    renderChatInput({ onSend: mockOnSend, disabled: false })
 
     expect(screen.getByTestId('chat-textarea')).toBeInTheDocument()
     expect(screen.getByTestId('send-button')).toBeInTheDocument()
   })
 
   it('triggers send on button click', () => {
-    render(<ChatInput onSend={mockOnSend} disabled={false} />)
+    renderChatInput({ onSend: mockOnSend, disabled: false })
 
     const textarea = screen.getByTestId('chat-textarea')
     fireEvent.change(textarea, { target: { value: 'Hello world' } })
@@ -116,7 +130,7 @@ describe('ChatInput', () => {
   })
 
   it('triggers send on Ctrl+Enter', () => {
-    render(<ChatInput onSend={mockOnSend} disabled={false} />)
+    renderChatInput({ onSend: mockOnSend, disabled: false })
 
     const textarea = screen.getByTestId('chat-textarea')
     fireEvent.change(textarea, { target: { value: 'Ctrl+Enter test' } })
@@ -126,7 +140,7 @@ describe('ChatInput', () => {
   })
 
   it('triggers send on Meta+Enter', () => {
-    render(<ChatInput onSend={mockOnSend} disabled={false} />)
+    renderChatInput({ onSend: mockOnSend, disabled: false })
 
     const textarea = screen.getByTestId('chat-textarea')
     fireEvent.change(textarea, { target: { value: 'Meta+Enter test' } })
@@ -136,7 +150,7 @@ describe('ChatInput', () => {
   })
 
   it('does not send when disabled', () => {
-    render(<ChatInput onSend={mockOnSend} disabled={true} />)
+    renderChatInput({ onSend: mockOnSend, disabled: true })
 
     const textarea = screen.getByTestId('chat-textarea')
     fireEvent.change(textarea, { target: { value: 'Should not send' } })
@@ -148,7 +162,7 @@ describe('ChatInput', () => {
   })
 
   it('does not send empty text', () => {
-    render(<ChatInput onSend={mockOnSend} disabled={false} />)
+    renderChatInput({ onSend: mockOnSend, disabled: false })
 
     const sendBtn = screen.getByTestId('send-button')
     fireEvent.click(sendBtn)
@@ -157,7 +171,7 @@ describe('ChatInput', () => {
   })
 
   it('handles file drop', () => {
-    render(<ChatInput onSend={mockOnSend} disabled={false} />)
+    renderChatInput({ onSend: mockOnSend, disabled: false })
 
     const dropzone = screen.getByTestId('chat-textarea').parentElement!
     const file = new File(['test content'], 'test.txt', { type: 'text/plain' })
@@ -169,7 +183,7 @@ describe('ChatInput', () => {
   })
 
   it('sends with attached files', () => {
-    render(<ChatInput onSend={mockOnSend} disabled={false} />)
+    renderChatInput({ onSend: mockOnSend, disabled: false })
 
     const dropzone = screen.getByTestId('chat-textarea').parentElement!
     const file = new File(['test content'], 'test.txt', { type: 'text/plain' })
@@ -196,6 +210,7 @@ describe('Chat streaming', () => {
   })
 
   afterEach(() => {
+    cleanup()
     vi.restoreAllMocks()
   })
 

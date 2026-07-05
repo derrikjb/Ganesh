@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { useAccessibility } from '../contexts/AccessibilityContext'
 import type { AttachedFile } from '../types/chat'
 
 interface ChatInputProps {
@@ -9,9 +10,11 @@ interface ChatInputProps {
 const ACCEPTED_TYPES = ['image/*', 'text/*', 'application/pdf']
 
 export function ChatInput({ onSend, disabled }: ChatInputProps) {
+  const { textOnlyMode } = useAccessibility()
   const [text, setText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [justSent, setJustSent] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -71,6 +74,8 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
+    setJustSent(true)
+    window.setTimeout(() => setJustSent(false), 1200)
   }, [text, attachedFiles, disabled, onSend])
 
   const handleKeyDown = useCallback(
@@ -162,6 +167,23 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
           </svg>
         </button>
+        {!textOnlyMode && (
+          <button
+            type="button"
+            disabled={disabled}
+            className="text-text-muted hover:text-accent transition-colors p-1 disabled:opacity-50"
+            aria-label="Voice input"
+            title="Voice input"
+            data-testid="mic-button"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+              <path d="M19 10v2a7 7 0 01-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          </button>
+        )}
         <button
           onClick={handleSend}
           disabled={disabled || !text.trim()}
@@ -179,6 +201,16 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           </svg>
         </button>
       </div>
+
+      {justSent && (
+        <div
+          className="absolute -top-6 right-4 text-xs text-status-success bg-bg-elevated px-2 py-1 rounded-md shadow-md"
+          data-testid="send-confirmation"
+          role="status"
+        >
+          Sent
+        </div>
+      )}
 
       {isDragging && (
         <div className="absolute inset-0 flex items-center justify-center bg-accent-muted rounded-lg border-2 border-dashed border-accent pointer-events-none">

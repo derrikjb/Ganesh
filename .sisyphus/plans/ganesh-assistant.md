@@ -1414,7 +1414,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 15. STT Integration (faster-whisper Local + Cloud Fallback)
+- [x] 15. STT Integration (faster-whisper Local + Cloud Fallback)
 
   **What to do**:
   - Create `backend/voice/stt.py`: `POST /voice/stt` accepting audio file (multipart), returns transcript
@@ -1459,7 +1459,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 16. TTS Integration (Piper Local + Cloud Fallback)
+- [x] 16. TTS Integration (Piper Local + Cloud Fallback)
 
   **What to do**:
   - Create `backend/voice/tts.py`: `POST /voice/tts` accepting `{text}`, returns WAV audio stream
@@ -1550,7 +1550,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 18. Modular Visualizer Plugin Interface + Waveform Implementation
+- [x] 18. Modular Visualizer Plugin Interface + Waveform Implementation
 
   **What to do**:
   - Create `frontend/src/visualizers/types.ts`: `AudioVisualizer` interface
@@ -1642,7 +1642,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 20. In-App Document Viewer (Images, Text, PDF, JSON) + Annotation
+- [x] 20. In-App Document Viewer (Images, Text, PDF, JSON) + Annotation
 
   **What to do**:
   - Create `frontend/src/components/viewer/DocumentViewer.tsx`: modal/panel for viewing files
@@ -1696,7 +1696,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 21. Theme System (Borders, Background, Chat Style/Color) + Theme Switcher
+- [x] 21. Theme System (Borders, Background, Chat Style/Color) + Theme Switcher
 
   **What to do**:
   - Extend `frontend/src/styles/tokens.css`: make all theme properties overridable
@@ -1738,7 +1738,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 22. First-Run Model Download UX (Progress, Checksum, Resume)
+- [x] 22. First-Run Model Download UX (Progress, Checksum, Resume)
 
   **What to do**:
   - Create `backend/models/manager.py`: download manager for ML models
@@ -1797,7 +1797,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 23. Text-Only Mode (Accessibility Parity)
+- [x] 23. Text-Only Mode (Accessibility Parity)
 
   **What to do**:
   - Ensure ALL functionality is accessible without voice (chat-only mode)

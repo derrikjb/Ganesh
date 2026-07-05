@@ -12,6 +12,7 @@ dependencies = [
     "python-multipart",
     "lancedb",
     "mem0ai",
+    "piper-tts",
 ]
 
 [project.optional-dependencies]

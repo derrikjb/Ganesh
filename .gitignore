@@ -30,7 +30,8 @@ Thumbs.db
 *.swp
 *~
 
-# IDE
+# LanceDB test artifacts
+backend/:memory:/
 .vscode/
 .idea/
 .project

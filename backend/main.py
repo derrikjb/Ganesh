@@ -25,9 +25,12 @@ from ganesh_backend.routers import memory as memory_router
 
 from ganesh_backend.routers import files as files_router
 
+from ganesh_backend.routers import models as models_router
+
 from ganesh_backend.routers import search as search_router
 
 from ganesh_backend.routers import chat as chat_router
+from ganesh_backend.routers import voice as voice_router
 from ganesh_backend.routers.config import router as config_router
 
 # Tauri v2 webview origins. On Windows the webview uses https://tauri.localhost,
@@ -53,6 +56,8 @@ NATIVE_DEPS: tuple[str, ...] = (
     "yaml",  # PyYAML exposes the `yaml` module, not `pyyaml`
     "lancedb",
     "mem0",
+    "piper",  # piper-tts exposes the `piper` module
+    "faster_whisper",  # faster-whisper exposes the `faster_whisper` module
 )
 
 # A threading.Event coordinates shutdown between the /shutdown endpoint and the
@@ -82,6 +87,10 @@ def create_app() -> FastAPI:
     app.include_router(files_router.router)
 
     app.include_router(chat_router.router, prefix="/api")
+
+    app.include_router(models_router.router)
+
+    app.include_router(voice_router.router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
