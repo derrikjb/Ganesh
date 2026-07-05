@@ -19,7 +19,6 @@ export function VisualizerCanvas({ plugin, audioData, className, state: forcedSt
   const stateStartTimeRef = useRef<number>(0);
 
   const [currentState, setCurrentState] = useState<VisualizerState>('IDLE');
-  const [_elapsedMs, setElapsedMs] = useState(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isWebGL = plugin.name === 'Holo Face';
@@ -72,7 +71,6 @@ export function VisualizerCanvas({ plugin, audioData, className, state: forcedSt
     }
 
     const elapsed = timestamp - stateStartTimeRef.current;
-    setElapsedMs(elapsed);
 
     pluginRef.current.render({
       ctx: ctx as any,
