@@ -34,12 +34,24 @@ describe('WaveformVisualizer', () => {
     expect(ctx.stroke).toHaveBeenCalled();
   });
 
-  it('handles empty audio data', () => {
+  it('handles empty audio data with idle animation', () => {
     const ctx = createMockContext();
     const audioData = new Float32Array(0);
     const dimensions = { width: 100, height: 50 };
 
     WaveformVisualizer.render({ ctx: ctx as any, audioData, dimensions });
+
+    expect(ctx.clearRect).toHaveBeenCalled();
+    expect(ctx.fillRect).toHaveBeenCalled();
+    expect(ctx.moveTo).toHaveBeenCalled();
+  });
+
+  it('handles empty audio data with SPEAKING state (no drawing)', () => {
+    const ctx = createMockContext();
+    const audioData = new Float32Array(0);
+    const dimensions = { width: 100, height: 50 };
+
+    WaveformVisualizer.render({ ctx: ctx as any, audioData, dimensions, state: 'SPEAKING' });
 
     expect(ctx.clearRect).toHaveBeenCalled();
     expect(ctx.fillRect).toHaveBeenCalled();

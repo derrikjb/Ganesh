@@ -24,12 +24,24 @@ export interface Dimensions {
 }
 
 /**
+ * Visualizer state enum for ambient animations.
+ * - IDLE: No audio playing, gentle breathing animation
+ * - THINKING: Processing a request, faster pulse
+ * - SPEAKING: Active audio output, full waveform visualization
+ */
+export type VisualizerState = 'IDLE' | 'THINKING' | 'SPEAKING';
+
+/**
  * Render context passed to plugin.render().
  */
 export interface RenderParams {
   ctx: RenderContext;
   audioData: AudioData;
   dimensions: Dimensions;
+  /** Current visualizer state (default: 'IDLE') */
+  state?: VisualizerState;
+  /** Elapsed milliseconds in current state */
+  timeMs?: number;
 }
 
 /**

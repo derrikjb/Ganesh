@@ -5,7 +5,7 @@ import { WaveformVisualizer } from '../visualizer/plugins/WaveformVisualizer';
 import { FreqBarsVisualizer } from '../visualizer/plugins/FreqBarsVisualizer';
 import { ParticleVisualizer } from '../visualizer/plugins/ParticleVisualizer';
 import { HoloFaceVisualizer } from '../visualizer/plugins/HoloFaceVisualizer';
-import type { VisualizerPlugin, AudioData } from '../visualizer/types';
+import type { VisualizerPlugin, AudioData, VisualizerState } from '../visualizer/types';
 
 register(WaveformVisualizer);
 register(FreqBarsVisualizer);
@@ -20,7 +20,11 @@ function generateMockAudioData(length: number = 512): AudioData {
   return data;
 }
 
-export function VoiceVisualizer() {
+interface VoiceVisualizerProps {
+  state?: VisualizerState;
+}
+
+export function VoiceVisualizer({ state }: VoiceVisualizerProps = {}) {
   const plugins = useMemo(() => listPlugins(), []);
   const [activeIndex, setActiveIndex] = useState(0);
   const [audioData] = useState<AudioData>(() => generateMockAudioData());
@@ -64,6 +68,7 @@ export function VoiceVisualizer() {
         <VisualizerCanvas
           plugin={activePlugin}
           audioData={audioData}
+          state={state}
         />
       </div>
     </div>
