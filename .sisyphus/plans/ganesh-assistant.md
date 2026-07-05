@@ -1849,7 +1849,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 24. Async Task Manager + SQLite Status Store (Start/Status/Cancel/Result)
+- [x] 24. Async Task Manager + SQLite Status Store (Start/Status/Cancel/Result)
 
   **What to do**:
   - Create `backend/tasks/manager.py`: central task registry using asyncio + SQLite persistence
@@ -1913,7 +1913,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 25. Sub-Agent Orchestration (Main Spawns Sub-agents, Parses Results)
+- [x] 25. Sub-Agent Orchestration (Main Spawns Sub-agents, Parses Results)
 
   **What to do**:
   - Create `backend/agents/sub_agent.py`: sub-agent runner
@@ -1961,7 +1961,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 26. Plugin System (importlib + Manifest, Plugins Dir, Tool Registration)
+- [x] 26. Plugin System (importlib + Manifest, Plugins Dir, Tool Registration)
 
   **What to do**:
   - Create `backend/plugins/loader.py`: dynamic plugin discovery + loading
