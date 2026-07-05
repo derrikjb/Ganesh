@@ -521,3 +521,14 @@
 - `--check-imports` passes (vaderSentiment in NATIVE_DEPS).
 - ruff clean on all changed files.
 - mypy clean on emotion.py/router.py (pre-existing config.py errors unchanged).
+
+## Task 34: Emotional Context Awareness (Tone Detection + Personality Adjustment)
+- `vaderSentiment` (pure-Python, lexicon + rule-based) is the chosen sentiment backend. Already installed in `backend/venv`. Added to `pyproject.toml`, `main.py` NATIVE_DEPS, `docs/NATIVE_DEPS.md`, and `pyinstaller.spec` (collect_all for lexicon data files).
+- VADER's compound score alone is NOT sufficient for tone classification: "hey can you help me" scores +0.40 (positive) because "help" is positive in VADER's lexicon. Joined frustrated-message windows can yield compound > 0. Solution: keyword-booster regexes (`_FRUSTRATION_TOKENS`, `_EXCITEMENT_TOKENS`, `_SADNESS_TOKENS`) sharpen VADER's general polarity into the four target tones. Confidence blends |compound| + keyword boost so confidence > 0.6 only when both signals agree.
+- Integration pattern: `PersonalityEngine.apply_emotion_shifts(deltas, confidence)` is a new method that mirrors `shift_traits()` but takes explicit per-trait deltas (scaled by confidence, clamped to ±MUTATION_RATE_CAP, skips locked traits, no persistence). This keeps the emotion layer decoupled from the context-analysis internals of `_analyze_context`.
+- EmotionAnalyzer is stateless beyond a lazily-initialised VADER singleton — safe for FastAPI threadpool. No emotional state persisted (spec requirement).
+- Trait-shift mapping (Task 34 falsifiable spec): frustration → verbosity -0.10, warmth -0.05, assertiveness +0.10; excitement → warmth +0.10, humor +0.10; sadness → warmth +0.10, humor -0.10; neutral → no shift. Deltas are pre-clamp maxima at confidence=1.0.
+- Router endpoints: `GET /api/emotion/supported`, `POST /api/emotion/analyze`, `POST /api/emotion/shift` (applies shifts to active personality engine, returns analysis + traits + locked + baseline).
+- Pre-existing duplicate `continuity_router` import in main.py (lines 39 + 42) — removed the duplicate while adding the emotion router import.
+- mypy strict mode: vaderSentiment has no py.typed marker, so the import needs `# type: ignore[import-untyped]`. The `except ImportError: _Vader = None` branch needs `# type: ignore[assignment]` only when the import succeeds (mypy flags it as unused otherwise — the assignment type doesn't match the class). Final: `# type: ignore[import-untyped]` on the import line is sufficient; the `None` fallback doesn't need a separate ignore under strict mode.
+- Test count: 139 → 153 (+14 new emotion tests). All 5 spec-required tests pass: test_frustration_detection, test_excitement_detection, test_neutral_no_shift, test_emotion_respects_locks, test_emotion_bounded_by_cap.
