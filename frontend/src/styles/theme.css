@@ -1,0 +1,86 @@
+/**
+ * Theme Layer — Ganesh AI Assistant
+ *
+ * Maps design tokens to semantic theme variables.
+ * Override by setting these on [data-theme] or :root.
+ * Default theme: dark.
+ */
+
+:root,
+[data-theme='dark'] {
+  /* Semantic background mapping */
+  --bg-primary: var(--color-bg-primary);
+  --bg-secondary: var(--color-bg-secondary);
+  --bg-tertiary: var(--color-bg-tertiary);
+  --bg-elevated: var(--color-bg-elevated);
+
+  /* Semantic text mapping */
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --text-inverse: var(--color-text-inverse);
+
+  /* Semantic accent mapping */
+  --accent: var(--color-accent);
+  --accent-hover: var(--color-accent-hover);
+  --accent-muted: var(--color-accent-muted);
+
+  /* Semantic status mapping */
+  --status-success: var(--color-success);
+  --status-warning: var(--color-warning);
+  --status-error: var(--color-error);
+  --status-info: var(--color-info);
+
+  /* Semantic border mapping */
+  --border: var(--color-border);
+  --border-subtle: var(--color-border-subtle);
+  --border-focus: var(--color-border-focus);
+
+  /* Font stacks */
+  --font-family-sans: var(--font-sans);
+  --font-family-mono: var(--font-mono);
+
+  /* Spacing aliases */
+  --spacing-xs: var(--space-xs);
+  --spacing-sm: var(--space-sm);
+  --spacing-md: var(--space-md);
+  --spacing-lg: var(--space-lg);
+  --spacing-xl: var(--space-xl);
+  --spacing-2xl: var(--space-2xl);
+  --spacing-3xl: var(--space-3xl);
+
+  /* Typography aliases */
+  --text-size-xs: var(--text-xs);
+  --text-size-sm: var(--text-sm);
+  --text-size-base: var(--text-base);
+  --text-size-lg: var(--text-lg);
+  --text-size-xl: var(--text-xl);
+  --text-size-2xl: var(--text-2xl);
+  --text-size-3xl: var(--text-3xl);
+  --text-size-4xl: var(--text-4xl);
+
+  /* Radius aliases */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  /* Shadow aliases */
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+
+  /* Transition aliases */
+  --transition-fast: var(--transition-fast);
+  --transition-base: var(--transition-base);
+  --transition-slow: var(--transition-slow);
+
+  /* Z-index aliases */
+  --z-dropdown: var(--z-dropdown);
+  --z-sticky: var(--z-sticky);
+  --z-overlay: var(--z-overlay);
+  --z-modal: var(--z-modal);
+  --z-toast: var(--z-toast);
+}
