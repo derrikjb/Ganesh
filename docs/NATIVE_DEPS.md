@@ -1,31 +1,47 @@
 # Native Dependencies Registry
 
-This document tracks Python dependencies with native components (C/C++/Rust/etc.) and their handling in the PyInstaller frozen binary.
+This document tracks Python dependencies with native components (C/C++/Rust/etc.)
+and their handling in the PyInstaller frozen binary (`backend/pyinstaller.spec`).
 
 ## Registry
 
-| Dependency | Native? | PyInstaller Handling | Notes |
-|------------|---------|----------------------|-------|
-| `fastapi` | No | Pure Python | Standard import |
-| `uvicorn` | No | Pure Python | Standard import |
-| `litellm` | No | Pure Python | Standard import |
-| `pydantic` | Yes | `collect_dynamic_libs` | Rust-backed in v2 |
-| `keyring` | Yes | Platform-specific | Uses OS-level secret stores |
+| Dependency | Native? | Import name | PyInstaller Handling | Notes |
+|------------|---------|-------------|----------------------|-------|
+| `fastapi` | No | `fastapi` | Pure Python | Standard import |
+| `uvicorn[standard]` | Partial | `uvicorn` | `collect_all("uvicorn")` | Pulls httptools/uvloop/watchfiles native libs on supported platforms |
+| `litellm` | No | `litellm` | Pure Python | Standard import |
+| `pydantic` | Yes (Rust) | `pydantic` | `collect_all("pydantic")` | pydantic v2 core is Rust-compiled |
+| `pydantic-core` | Yes (Rust) | `pydantic_core` | `collect_all` + `collect_dynamic_libs` | Shared lib `libpydantic_core` |
+| `keyring` | Yes | `keyring` | `collect_all("keyring")` | Platform-specific backends (SecretStorage on Linux, Windows Credential Manager) |
+| `pyyaml` | No | `yaml` | Pure Python | Note: import name is `yaml`, not `pyyaml` |
 
-## Future Dependencies (Wave 2+)
+## `--check-imports` Verification
 
-- `faster-whisper` (Native: CTranslate2)
-- `piper-tts` (Native: Piper)
-- `lancedb` (Native: Rust)
-- `sounddevice` (Native: PortAudio)
-
-## Verification
-
-The frozen binary supports a `--check-imports` flag to verify all native dependencies are correctly bundled and importable in the frozen environment.
+The sidecar exposes a `--check-imports` CLI flag that imports every entry in
+`main.NATIVE_DEPS` and exits `0` on success or `1` on failure. This is the
+frozen-binary smoke test — run it after every PyInstaller build.
 
 ```bash
 ./ganesh-backend --check-imports
+# stdout: All native imports OK
 ```
+
+The registry lives in `backend/main.py` (`NATIVE_DEPS` tuple). Add new native
+deps there and to the spec file in the same change.
+
+## Future Dependencies (Wave 2+)
+
+These will be added to the registry and the PyInstaller spec as they land:
+
+| Dependency | Native runtime | Import name |
+|------------|----------------|-------------|
+| `faster-whisper` | CTranslate2 (C++) | `faster_whisper` |
+| `piper-tts` | ONNX Runtime (C++) | `piper` |
+| `lancedb` | Rust | `lancedb` |
+| `sounddevice` | PortAudio (C) | `sounddevice` |
+
+The `pyinstaller.spec` already contains commented-out `collect_all` /
+`collect_dynamic_libs` blocks for each of these — uncomment when the dep is added.
 
 ## System Dependencies
 
