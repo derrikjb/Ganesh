@@ -2315,7 +2315,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 32. Ambient Idle Animation (Visualizer Idle State)
+- [x] 32. Ambient Idle Animation (Visualizer Idle State)
 
   **What to do**:
   - Extend `frontend/src/visualizers/WaveformViz.ts` (and all visualizers): add idle state

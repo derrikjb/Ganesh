@@ -434,3 +434,42 @@
 ## Memory Service Fix
 - Removed duplicate method definitions in memory.py that were introduced during profile scoping.
 - Verified that the profile-aware versions of the methods were retained.
+
+## Task 32: Ambient Idle Animation (Visualizer Idle State)
+- `VisualizerState` is a union type (`'IDLE' | 'THINKING' | 'SPEAKING'`), not an enum — simpler and more idiomatic TypeScript.
+- `RenderParams` fields `state` and `timeMs` are **optional** for backward compatibility — existing plugins that don't destructure them still compile and work.
+- State machine in `VisualizerCanvas`: auto-detects SPEAKING when audio energy > 0.02 threshold, debounced return to IDLE after 300ms (via `setTimeout`). Forced `state` prop from parent overrides auto-detection entirely.
+- `timeMs` is computed as `rafTimestamp - stateStartTimeRef.current` — passed directly to render, no useState needed (avoids unnecessary re-renders).
+- Idle animation: 0.1Hz sine wave with 5% amplitude modulation (barely visible, CPU-light). Thinking: 1Hz pulse with 1.5x amplitude. Both use `Math.sin(timeSec * freq * PI * 2)` pattern.
+- **Test gotcha**: `fireAll()` only fires raf callbacks registered at call time — the raf loop re-schedules itself, so subsequent frames need separate `fireAll()` calls. State updates from raf callbacks need `act()` wrapping for React to flush.
+- **Test gotcha**: The IDLE→SPEAKING→IDLE transition uses a 300ms `setTimeout` debounce. Tests that verify the IDLE return must advance fake timers past the debounce threshold.
+- **Pre-existing test fix**: `waveform-render.test.ts` expected empty audio = no drawing. Now empty audio triggers idle animation (draws sine wave). Updated test to expect `moveTo` calls for IDLE state, and added a separate test for SPEAKING state with empty audio (no drawing).
+- All 176 tests pass, tsc --noEmit clean.
+
+## Task 32: Ambient Idle Animation (Visualizer Idle State)
+- `VisualizerState` type: `'IDLE' | 'THINKING' | 'SPEAKING'` — string literal union (not enum) for easy serialization and extensibility.
+- `RenderParams` extended with `state: VisualizerState` and `timeMs: number` — backward-compatible since existing plugins destructure only what they need.
+- `VisualizerCanvas` state machine: auto-detects audio activity via energy threshold (0.02 average amplitude). Transitions IDLE → SPEAKING immediately on activity, SPEAKING → IDLE after 300ms debounce (setTimeout).
+- `state` prop on `VisualizerCanvas` and `VoiceVisualizer` allows parent override (for future thinking indicator integration).
+- WaveformVisualizer idle: 0.1Hz sine wave with 3% height amplitude, opacity 0.3-0.45 — subtle breathing effect.
+- WaveformVisualizer thinking: 1Hz sine wave with 8% height amplitude, opacity 0.5-0.8 — faster, more visible pulse.
+- FreqBarsVisualizer idle: gentle wave-modulated bars at 15% max height, low opacity.
+- ParticleVisualizer idle: pulsing radial gradient glow at center (no particle spawning).
+- HoloFaceVisualizer idle: slow rotation + minimal vertex displacement, resets to original positions.
+- **Test gotcha**: `waitFor` + `vi.useFakeTimers()` = timeout. `waitFor` polls on real intervals but fake timers block the event loop. Solution: use `act()` + direct assertions for sync state checks, or enable fake timers only for specific tests that need `vi.advanceTimersByTime()`.
+- **TypeScript gotcha**: `_elapsedMs` pattern for unused state setter — prefix with `_` to satisfy TS no-unused-vars without removing the state (needed for `setElapsedMs` call).
+- All 176 tests pass, tsc --noEmit clean.
+
+## Task 32: Ambient Idle Animation (Visualizer Idle State)
+- `VisualizerState` type: `'IDLE' | 'THINKING' | 'SPEAKING'` — string literal union (not enum) for easy serialization and extensibility.
+- `RenderParams` extended with `state: VisualizerState` and `timeMs: number` — backward-compatible since existing plugins destructure only what they need.
+- `VisualizerCanvas` state machine: auto-detects audio activity via energy threshold (0.02 average amplitude). Transitions IDLE → SPEAKING immediately on activity, SPEAKING → IDLE after 300ms debounce (setTimeout).
+- `state` prop on `VisualizerCanvas` and `VoiceVisualizer` allows parent override (for future thinking indicator integration).
+- WaveformVisualizer idle: 0.1Hz sine wave with 3% height amplitude, opacity 0.3-0.45 — subtle breathing effect.
+- WaveformVisualizer thinking: 1Hz sine wave with 8% height amplitude, opacity 0.5-0.8 — faster, more visible pulse.
+- FreqBarsVisualizer idle: gentle wave-modulated bars at 15% max height, low opacity.
+- ParticleVisualizer idle: pulsing radial gradient glow at center (no particle spawning).
+- HoloFaceVisualizer idle: slow rotation + minimal vertex displacement, resets to original positions.
+- **Test gotcha**: `waitFor` + `vi.useFakeTimers()` = timeout. `waitFor` polls on real intervals but fake timers block the event loop. Solution: use `act()` + direct assertions for sync state checks, or enable fake timers only for specific tests that need `vi.advanceTimersByTime()`.
+- **TypeScript gotcha**: `_elapsedMs` pattern for unused state setter — prefix with `_` to satisfy TS no-unused-vars without removing the state (needed for `setElapsedMs` call).
+- All 176 tests pass, tsc --noEmit clean.
