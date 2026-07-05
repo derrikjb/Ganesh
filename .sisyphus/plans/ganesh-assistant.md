@@ -2012,7 +2012,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 27. Conversation History (Search, Export JSON/Markdown, Delete)
+- [x] 27. Conversation History (Search, Export JSON/Markdown, Delete)
 
   **What to do**:
   - Create `backend/conversations.py`: conversation persistence
@@ -2067,7 +2067,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 28. Additional LLM Providers (Anthropic, Google, OpenRouter) via LiteLLM
+- [x] 28. Additional LLM Providers (Anthropic, Google, OpenRouter) via LiteLLM
 
   **What to do**:
   - Extend `backend/llm_router.py`: add Anthropic, Google, OpenRouter providers
@@ -2119,7 +2119,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 29. Local LLM Support (OpenAI-compat Endpoints, Ollama)
+- [x] 29. Local LLM Support (OpenAI-compat Endpoints, Ollama)
 
   **What to do**:
   - Extend `backend/llm_router.py`: add "local" provider type
@@ -2163,7 +2163,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 30. Personality Trait Matrix (YAML Config) + Dynamic Shifting Engine
+- [x] 30. Personality Trait Matrix (YAML Config) + Dynamic Shifting Engine
 
   **What to do**:
   - Create `backend/personality/traits.py`: trait matrix system
