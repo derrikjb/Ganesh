@@ -232,79 +232,9 @@ class MemoryService:
         return records
 
     def delete_memories_for_profile(self, profile_id: str) -> int:
-        """Delete every memory owned by ``profile_id``. Returns the count removed."""
-        memories = self.list_memories(profile_id=profile_id)
-        count = 0
-        for mem in memories:
-            if self._store.get(mem.id) is not None:
-                self._store.delete(mem.id)
-                count += 1
-        return count
-
-    def update_memory(
-        self,
-        memory_id: str,
-        content: str,
-        metadata: Optional[dict[str, Any]] = None,
-    ) -> Optional[MemoryRecord]:
-        existing = self._store.get(memory_id)
-        if existing is None:
-            return None
-        old_payload = existing.payload
-        now = datetime.now(timezone.utc).isoformat()
-        new_metadata = metadata if metadata is not None else old_payload.get("user_metadata", {})
-        full_metadata = {
-            "content": content,
-            "user_metadata": new_metadata,
-            "created_at": old_payload.get("created_at", now),
-            "updated_at": now,
-        }
-        new_embedding = self._embedder.embed(content)
-        self._store.update(
-            vector_id=memory_id,
-            vector=new_embedding,
-            payload=full_metadata,
-        )
-        return MemoryRecord(
-            id=memory_id,
-            content=content,
-            metadata=new_metadata,
-            created_at=full_metadata["created_at"],
-            updated_at=now,
-        )
-
-    def delete_memory(self, memory_id: str) -> bool:
-        existing = self._store.get(memory_id)
-        if existing is None:
-            return False
-        self._store.delete(memory_id)
-        return True
-
-    def list_memories(self, profile_id: Optional[str] = None) -> list[MemoryRecord]:
-        filters: Optional[dict[str, Any]] = None
-        if profile_id is not None:
-            filters = {"profile_id": profile_id}
-        results = self._store.list(filters=filters)
-        records: list[MemoryRecord] = []
-        for result in results:
-            payload = result.payload
-            if profile_id is not None and payload.get("profile_id") != profile_id:
-                continue
-            records.append(
-                MemoryRecord(
-                    id=result.id,
-                    content=payload.get("content", ""),
-                    metadata=payload.get("user_metadata", {}),
-                    created_at=payload.get("created_at", ""),
-                    updated_at=payload.get("updated_at", ""),
-                )
-            )
-        return records
-
-    def delete_memories_for_profile(self, profile_id: str) -> int:
         """Delete all memories owned by ``profile_id``. Returns count removed."""
         removed = 0
         for record in self.list_memories(profile_id=profile_id):
-            if self.delete_memory(record.id):
+            if self.delete_memory(record.id, profile_id=profile_id):
                 removed += 1
         return removed
