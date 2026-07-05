@@ -2240,7 +2240,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 31. Multiple User Profiles + Shared Bridge Memory Layer
+- [x] 31. Multiple User Profiles + Shared Bridge Memory Layer
 
   **What to do**:
   - Create `backend/profiles/manager.py`: profile management

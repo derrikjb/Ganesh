@@ -431,3 +431,6 @@
 - **Test mock sequencing**: the component fires 3 fetches on mount (profiles, grants, audit) — tests must mock all 3 in order with `mockResolvedValueOnce`. Action-triggered refreshes also consume mocks in the same order.
 - No new native deps — SQLite is stdlib, LanceDB already registered. No NATIVE_DEPS.md update needed.
 - Tests: 6 backend (test_profiles.py), 8 frontend (ProfileSwitcher.test.tsx). Full suite: 133 backend + 164 frontend passing. tsc clean.
+## Memory Service Fix
+- Removed duplicate method definitions in memory.py that were introduced during profile scoping.
+- Verified that the profile-aware versions of the methods were retained.
