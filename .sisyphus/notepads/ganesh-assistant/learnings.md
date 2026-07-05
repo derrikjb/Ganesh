@@ -215,3 +215,13 @@
 - mypy strict: `dict[str, asyncio.Task]` needs `dict[str, "asyncio.Task[object]"]` (Task is generic). `httpx.AsyncClient.close()` doesn't exist — use `aclose()`.
 - Pre-existing failures (not from this task): `test_check_imports`, `test_native_deps` (parallel voice task added `piper` to NATIVE_DEPS but piper isn't installed); `test_stt.py::test_cloud_fallback` (voice task). Frontend: `ThemeContext.test.tsx` (6) + `waveform-render.test.ts` (1) fail in full-suite but pass in isolation — pre-existing test-isolation issues from parallel visualizer/accessibility tasks.
 - Verification: backend `pytest tests/test_models.py -v` → 5 passed. Frontend `vitest run src/__tests__/ModelDownload.test.tsx` → 10 passed. mypy clean, ruff clean.
+
+## Wave 3: Voice Activation (Task 17) — push-to-talk / wake-word / VAD + barge-in
+- `VoiceActivationService` is a thread-safe (RLock) finite-state machine: IDLE → LISTENING → PROCESSING → SPEAKING → (barge-in) → LISTENING. States live in `VoiceState` enum; modes in `ActivationMode` enum.
+- `sherpa-onnx` is imported lazily inside `_is_wake_word` / `_is_voice_activity`; tests inject fakes via the `wake_word_detector` / `vad_detector` ctor params (duck-typed Protocols). No model downloads at import time.
+- Barge-in cancels both TTS and LLM via injected `tts_canceller` / `llm_canceller` callables (kept exception-swallowing so a failing canceller never blocks the state transition).
+- Singleton pattern mirrors stt/tts: `get_voice_activation_service()` / `reset_voice_activation_service()` / `set_voice_activation_service()` (the last lets tests wire a mocked instance into the router).
+- Router additions on `/api/voice`: `start-listening`, `stop-listening`, `audio-chunk`, `barge-in`, `state`, `set-mode`, `reset`. Illegal transitions return 409.
+- Frontend `VoiceActivation.tsx` uses `navigator.mediaDevices.getUserMedia({ audio: true })`, `MediaRecorder` for push-to-talk, `AudioContext` + `ScriptProcessor` for VAD/wake-word streaming. jsdom has neither — tests must polyfill `MediaRecorder` and `AudioContext` with fake classes and stub `navigator.mediaDevices`.
+- Tauri CSP updated: added `media-src 'self'` to allow microphone capture in the webview.
+- Pre-existing tsc errors (21 lines) and 4 vitest failures in `holo-face-visualizer.test.ts` / `freq-bars-visualizer.test.ts` / `particle-visualizer.test.ts` are from Task 18/19 (visualizer + holo-face) and are OUT OF SCOPE for Task 17 — do not touch.

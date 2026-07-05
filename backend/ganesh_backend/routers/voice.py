@@ -18,6 +18,15 @@ from pydantic import BaseModel, Field
 
 from ganesh_backend.services import stt as stt_service
 from ganesh_backend.services.tts import TTSError, get_tts_service
+from ganesh_backend.services.voice_activation import (
+    ActivationMode,
+    IllegalTransitionError,
+    VoiceState,
+    get_voice_activation_service,
+    reset_voice_activation_service,
+    set_voice_activation_service,
+    VoiceActivationService,
+)
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
@@ -154,3 +163,101 @@ async def voices() -> Any:
     return VoicesResponse(
         voices=[VoiceInfo(**v) for v in service.list_voices()]
     )
+
+
+# ---------------------------------------------------------------------------
+# Voice activation: push-to-talk / wake-word / VAD + barge-in state machine
+# ---------------------------------------------------------------------------
+
+
+class VoiceStateResponse(BaseModel):
+    state: VoiceState
+    mode: ActivationMode
+
+
+class SetModeRequest(BaseModel):
+    mode: ActivationMode
+
+
+class AudioChunkRequest(BaseModel):
+    chunk: bytes = Field(..., description="Raw audio chunk (base64-safe bytes).")
+
+
+class BargeInResponse(BaseModel):
+    state: VoiceState
+    cancelled_tts: bool
+    cancelled_llm: bool
+
+
+@router.get("/state", response_model=VoiceStateResponse)
+async def voice_state() -> Any:
+    service = get_voice_activation_service()
+    return VoiceStateResponse(state=service.get_state(), mode=service.mode)
+
+
+@router.post("/set-mode", response_model=VoiceStateResponse)
+async def set_voice_mode(req: SetModeRequest) -> Any:
+    service = get_voice_activation_service()
+    service.set_mode(req.mode)
+    return VoiceStateResponse(state=service.get_state(), mode=service.mode)
+
+
+@router.post("/start-listening", response_model=VoiceStateResponse)
+async def start_listening() -> Any:
+    service = get_voice_activation_service()
+    try:
+        service.start_listening()
+    except IllegalTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return VoiceStateResponse(state=service.get_state(), mode=service.mode)
+
+
+@router.post("/stop-listening")
+async def stop_listening() -> Any:
+    service = get_voice_activation_service()
+    try:
+        captured = service.stop_listening()
+    except IllegalTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "state": service.get_state(),
+        "mode": service.mode,
+        "audio_size": len(captured),
+    }
+
+
+@router.post("/audio-chunk", response_model=VoiceStateResponse)
+async def audio_chunk(req: AudioChunkRequest) -> Any:
+    service = get_voice_activation_service()
+    new_state = service.process_audio_chunk(req.chunk)
+    if new_state is None:
+        return VoiceStateResponse(state=service.get_state(), mode=service.mode)
+    return VoiceStateResponse(state=new_state, mode=service.mode)
+
+
+@router.post("/barge-in", response_model=BargeInResponse)
+async def barge_in() -> Any:
+    service = get_voice_activation_service()
+    try:
+        service.barge_in()
+    except IllegalTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return BargeInResponse(
+        state=service.get_state(),
+        cancelled_tts=True,
+        cancelled_llm=True,
+    )
+
+
+@router.post("/reset", response_model=VoiceStateResponse)
+async def reset_voice_state() -> Any:
+    service = get_voice_activation_service()
+    service.reset()
+    return VoiceStateResponse(state=service.get_state(), mode=service.mode)
+
+
+__all__ = [
+    "set_voice_activation_service",
+    "reset_voice_activation_service",
+    "VoiceActivationService",
+]
