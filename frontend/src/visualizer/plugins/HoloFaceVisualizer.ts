@@ -80,7 +80,7 @@ export const HoloFaceVisualizer: VisualizerPlugin = {
     state.scene.add(state.particles);
   },
 
-  render({ ctx, audioData }: RenderParams) {
+  render({ ctx, audioData, state: vizState, timeMs }: RenderParams) {
     if (!state.renderer || !state.scene || !state.camera || !state.mesh) return;
 
     const canvas = ctx.canvas;
@@ -91,54 +91,12 @@ export const HoloFaceVisualizer: VisualizerPlugin = {
     state.camera.aspect = rect.width / rect.height;
     state.camera.updateProjectionMatrix();
 
-    const data = Array.from(audioData);
-    const energy = data.length > 0
-      ? data.reduce((sum, v) => sum + Math.abs(v), 0) / data.length
-      : 0;
-
-    if (state.mesh && state.originalPositions) {
-      const positions = state.mesh.geometry.attributes.position.array as Float32Array;
-      for (let i = 0; i < positions.length; i += 3) {
-        const origY = state.originalPositions[i + 1];
-        const origX = state.originalPositions[i];
-        const origZ = state.originalPositions[i + 2];
-
-        if (origY < -0.2) {
-          const jawFactor = Math.abs(origY) * energy * 0.5;
-          positions[i] = origX + origX * jawFactor;
-          positions[i + 1] = origY - jawFactor * 0.3;
-          positions[i + 2] = origZ + origZ * jawFactor;
-        } else {
-          positions[i] = origX;
-          positions[i + 1] = origY;
-          positions[i + 2] = origZ;
-        }
-      }
-      state.mesh.geometry.attributes.position.needsUpdate = true;
-
-      const material = state.mesh.material as THREE.MeshBasicMaterial;
-      const hue = 0.6 + energy * 0.1;
-      material.color.setHSL(hue % 1, 0.8, 0.5 + energy * 0.2);
-      material.opacity = 0.5 + energy * 0.4;
+    if (vizState === 'IDLE' || vizState === 'THINKING') {
+      renderIdle(timeMs, vizState === 'THINKING');
+      return;
     }
 
-    if (state.particles) {
-      const particlePositions = state.particles.geometry.attributes.position.array as Float32Array;
-      for (let i = 0; i < particlePositions.length; i += 3) {
-        particlePositions[i] += (Math.random() - 0.5) * energy * 0.05;
-        particlePositions[i + 1] += (Math.random() - 0.5) * energy * 0.05;
-        particlePositions[i + 2] += (Math.random() - 0.5) * energy * 0.05;
-      }
-      state.particles.geometry.attributes.position.needsUpdate = true;
-      (state.particles.material as THREE.PointsMaterial).opacity = 0.3 + energy * 0.5;
-    }
-
-    if (state.mesh) {
-      state.mesh.rotation.y += 0.005 + energy * 0.01;
-      state.mesh.rotation.x = Math.sin(Date.now() * 0.001) * 0.1;
-    }
-
-    state.renderer.render(state.scene, state.camera);
+    renderSpeaking(audioData);
   },
 
   destroy() {
@@ -161,3 +119,85 @@ export const HoloFaceVisualizer: VisualizerPlugin = {
     state.originalPositions = null;
   },
 };
+
+function renderIdle(timeMs: number, isThinking: boolean) {
+  if (!state.mesh || !state.particles) return;
+
+  const frequency = isThinking ? 0.001 : 0.0001;
+  const energy = 0.05 + 0.03 * Math.sin(timeMs * frequency * Math.PI * 2);
+
+  if (state.originalPositions) {
+    const positions = state.mesh.geometry.attributes.position.array as Float32Array;
+    for (let i = 0; i < positions.length; i += 3) {
+      positions[i] = state.originalPositions[i];
+      positions[i + 1] = state.originalPositions[i + 1];
+      positions[i + 2] = state.originalPositions[i + 2];
+    }
+    state.mesh.geometry.attributes.position.needsUpdate = true;
+
+    const material = state.mesh.material as THREE.MeshBasicMaterial;
+    material.color.setHSL(0.6, 0.8, 0.5 + energy * 0.2);
+    material.opacity = 0.5 + energy * 0.4;
+  }
+
+  const particlePositions = state.particles.geometry.attributes.position.array as Float32Array;
+  for (let i = 0; i < particlePositions.length; i += 3) {
+    particlePositions[i] += (Math.random() - 0.5) * energy * 0.02;
+    particlePositions[i + 1] += (Math.random() - 0.5) * energy * 0.02;
+    particlePositions[i + 2] += (Math.random() - 0.5) * energy * 0.02;
+  }
+  state.particles.geometry.attributes.position.needsUpdate = true;
+  (state.particles.material as THREE.PointsMaterial).opacity = 0.3 + energy * 0.5;
+
+  state.mesh.rotation.y += 0.003 + energy * 0.005;
+  state.mesh.rotation.x = Math.sin(Date.now() * 0.001) * 0.1;
+
+  state.renderer!.render(state.scene!, state.camera!);
+}
+
+function renderSpeaking(audioData: Float32Array | number[]) {
+  if (!state.mesh || !state.particles || !state.originalPositions) return;
+
+  const data = Array.from(audioData);
+  const energy = data.length > 0
+    ? data.reduce((sum, v) => sum + Math.abs(v), 0) / data.length
+    : 0;
+
+  const positions = state.mesh.geometry.attributes.position.array as Float32Array;
+  for (let i = 0; i < positions.length; i += 3) {
+    const origY = state.originalPositions![i + 1];
+    const origX = state.originalPositions![i];
+    const origZ = state.originalPositions![i + 2];
+
+    if (origY < -0.2) {
+      const jawFactor = Math.abs(origY) * energy * 0.5;
+      positions[i] = origX + origX * jawFactor;
+      positions[i + 1] = origY - jawFactor * 0.3;
+      positions[i + 2] = origZ + origZ * jawFactor;
+    } else {
+      positions[i] = origX;
+      positions[i + 1] = origY;
+      positions[i + 2] = origZ;
+    }
+  }
+  state.mesh.geometry.attributes.position.needsUpdate = true;
+
+  const material = state.mesh.material as THREE.MeshBasicMaterial;
+  const hue = 0.6 + energy * 0.1;
+  material.color.setHSL(hue % 1, 0.8, 0.5 + energy * 0.2);
+  material.opacity = 0.5 + energy * 0.4;
+
+  const particlePositions = state.particles.geometry.attributes.position.array as Float32Array;
+  for (let i = 0; i < particlePositions.length; i += 3) {
+    particlePositions[i] += (Math.random() - 0.5) * energy * 0.05;
+    particlePositions[i + 1] += (Math.random() - 0.5) * energy * 0.05;
+    particlePositions[i + 2] += (Math.random() - 0.5) * energy * 0.05;
+  }
+  state.particles.geometry.attributes.position.needsUpdate = true;
+  (state.particles.material as THREE.PointsMaterial).opacity = 0.3 + energy * 0.5;
+
+  state.mesh.rotation.y += 0.005 + energy * 0.01;
+  state.mesh.rotation.x = Math.sin(Date.now() * 0.001) * 0.1;
+
+  state.renderer!.render(state.scene!, state.camera!);
+}
