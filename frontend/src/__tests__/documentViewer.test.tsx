@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { DocumentThumbnail } from '../components/DocumentThumbnail'
 import { DocumentViewer } from '../components/DocumentViewer'
 import { useDocuments } from '../hooks/useDocuments'
@@ -76,6 +76,14 @@ describe('DocumentViewer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  afterEach(() => {
+    cleanup()
   })
 
   it('renders image viewer for image documents', () => {
