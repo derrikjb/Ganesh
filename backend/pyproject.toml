@@ -10,6 +10,7 @@ dependencies = [
     "keyring",
     "pyyaml",
     "python-multipart",
+    "httpx",
 ]
 
 [project.optional-dependencies]

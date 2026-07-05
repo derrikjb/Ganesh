@@ -21,6 +21,13 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ganesh_backend.routers import files as files_router
+
+from ganesh_backend.routers import search as search_router
+
+from ganesh_backend.routers import chat as chat_router
+from ganesh_backend.routers.config import router as config_router
+
 # Tauri v2 webview origins. On Windows the webview uses https://tauri.localhost,
 # on Linux/macOS it uses tauri://localhost. Both must be allowed for CORS.
 TAURI_ORIGINS: tuple[str, ...] = (
@@ -66,9 +73,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(search_router.router)
+
+    app.include_router(chat_router.router, prefix="/api")
+
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    app.include_router(config_router)
 
     @app.post("/shutdown")
     async def shutdown() -> dict[str, str]:
@@ -77,6 +90,7 @@ def create_app() -> FastAPI:
         threading.Thread(target=_trigger_shutdown, daemon=True).start()
         return {"status": "shutting down"}
 
+    app.include_router(files_router.router)
     return app
 
 
