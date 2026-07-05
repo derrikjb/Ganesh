@@ -1,0 +1,15 @@
+{
+  "name": "example",
+  "version": "0.1.0",
+  "description": "Example Ganesh plugin: a simple note-taker that saves text to ~/.ganesh/notes/.",
+  "entry_point": "register",
+  "tools": [
+    {
+      "name": "take_note",
+      "description": "Save a short note to ~/.ganesh/notes/<timestamp>.txt and return the path.",
+      "parameters": {
+        "text": {"type": "string", "required": true}
+      }
+    }
+  ]
+}

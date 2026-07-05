@@ -30,9 +30,9 @@ from ganesh_backend.routers import models as models_router
 from ganesh_backend.routers import search as search_router
 
 from ganesh_backend.routers import chat as chat_router
+from ganesh_backend.routers import plugins as plugins_router
 from ganesh_backend.routers import tasks as tasks_router
 from ganesh_backend.routers import agents as agents_router
-from ganesh_backend.routers import plugins as plugins_router
 from ganesh_backend.routers import voice as voice_router
 from ganesh_backend.routers.config import router as config_router
 
@@ -72,6 +72,9 @@ shutdown_event = threading.Event()
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        from ganesh_backend.services.plugin_loader import get_loader
+
+        get_loader().load_all()
         yield
         shutdown_event.set()
 
