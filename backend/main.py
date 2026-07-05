@@ -31,6 +31,8 @@ from ganesh_backend.routers import search as search_router
 
 from ganesh_backend.routers import chat as chat_router
 from ganesh_backend.routers import tasks as tasks_router
+from ganesh_backend.routers import agents as agents_router
+from ganesh_backend.routers import plugins as plugins_router
 from ganesh_backend.routers import voice as voice_router
 from ganesh_backend.routers.config import router as config_router
 
@@ -109,6 +111,10 @@ def create_app() -> FastAPI:
     app.include_router(memory_router.router)
 
     app.include_router(tasks_router.router)
+
+    app.include_router(agents_router.router)
+
+    app.include_router(plugins_router.router)
 
     return app
 
