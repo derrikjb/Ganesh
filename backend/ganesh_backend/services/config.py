@@ -5,6 +5,15 @@ import keyring
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+SUPPORTED_PROVIDERS = ("openai", "anthropic", "google", "openrouter")
+
+_PROVIDER_ENV_VAR = {
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GEMINI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+}
+
 DEFAULT_CONFIG = {
     "llm": {
         "provider": "openai",
@@ -87,6 +96,29 @@ class ConfigService:
 
     def set_api_key(self, api_key: str) -> None:
         keyring.set_password(KEYRING_SERVICE, "openai_api_key", api_key)
+
+    def get_provider_key(self, provider: str) -> Optional[str]:
+        """Read a provider's API key from the keyring (no env fallback)."""
+        if provider not in SUPPORTED_PROVIDERS:
+            return None
+        return keyring.get_password(KEYRING_SERVICE, f"ganesh_api_key_{provider}")
+
+    def get_provider_key_env(self, provider: str) -> Optional[str]:
+        """Read a provider's API key from the environment variable fallback."""
+        env_var = _PROVIDER_ENV_VAR.get(provider)
+        if not env_var:
+            return None
+        return os.environ.get(env_var)
+
+    def set_provider_key(self, provider: str, api_key: str) -> None:
+        """Store a provider's API key in the keyring."""
+        if provider not in SUPPORTED_PROVIDERS:
+            raise ValueError(f"Unknown provider: {provider!r}")
+        keyring.set_password(KEYRING_SERVICE, f"ganesh_api_key_{provider}", api_key)
+
+    def is_provider_configured(self, provider: str) -> bool:
+        """True if a provider has a key in keyring or env."""
+        return bool(self.get_provider_key(provider) or self.get_provider_key_env(provider))
 
     def is_keyring_available(self) -> bool:
         try:

@@ -20,17 +20,28 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(..., min_length=1)
+    provider: str = llm_service.DEFAULT_PROVIDER
     model: str | None = None
     stream: bool = False
 
 
 class ChatResponse(BaseModel):
+    provider: str
     model: str
     content: str
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> Any:
+    if req.provider not in llm_service.SUPPORTED_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown provider: {req.provider!r}. "
+                f"Supported: {', '.join(llm_service.SUPPORTED_PROVIDERS)}"
+            ),
+        )
+
     if req.stream:
         return StreamingResponse(
             _stream_response(req), media_type="text/event-stream"
@@ -39,11 +50,14 @@ async def chat(req: ChatRequest) -> Any:
     try:
         response = llm_service.chat_completion(
             messages=[m.model_dump() for m in req.messages],
+            provider=req.provider,
             model=req.model,
             stream=False,
         )
     except llm_service.MissingAPIKeyError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except llm_service.UnsupportedProviderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except llm_service.LLMError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -55,17 +69,21 @@ async def chat(req: ChatRequest) -> Any:
             status_code=502, detail="Malformed LLM response"
         ) from exc
 
-    return ChatResponse(model=model, content=content)
+    return ChatResponse(provider=req.provider, model=model, content=content)
 
 
 def _stream_response(req: ChatRequest) -> Any:
     try:
         response = llm_service.chat_completion(
             messages=[m.model_dump() for m in req.messages],
+            provider=req.provider,
             model=req.model,
             stream=True,
         )
     except llm_service.MissingAPIKeyError as exc:
+        yield _sse_chunk({"error": str(exc)}, event="error")
+        return
+    except llm_service.UnsupportedProviderError as exc:
         yield _sse_chunk({"error": str(exc)}, event="error")
         return
     except llm_service.LLMError as exc:

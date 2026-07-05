@@ -1,10 +1,19 @@
 """LLM service layer.
 
-Wraps LiteLLM to provide a thin abstraction over chat completion calls.
+Wraps LiteLLM to provide a thin abstraction over chat completion calls for
+multiple providers: OpenAI, Anthropic, Google (Gemini), and OpenRouter.
+
 API keys are resolved from the OS keyring (via :mod:`ganesh_backend.services.config`)
-with a fallback to the ``OPENAI_API_KEY`` environment variable. The resolved key
-is cached for the lifetime of the process so repeated requests do not hit the
-keyring backend (which can be slow on some platforms).
+with a fallback to the ``{PROVIDER}_API_KEY`` environment variable. The resolved
+key is cached per-provider for the lifetime of the process so repeated requests
+do not hit the keyring backend (which can be slow on some platforms).
+
+LiteLLM model-prefix conventions:
+    - openai: plain model name (e.g. ``gpt-4o-mini``)
+    - anthropic: plain model name (litellm auto-detects the ``claude-`` prefix)
+    - google: ``gemini/<model>`` (litellm requires the ``gemini/`` prefix)
+    - openrouter: ``openrouter/<vendor>/<model>`` (litellm requires the
+      ``openrouter/`` prefix)
 """
 from __future__ import annotations
 
@@ -15,14 +24,47 @@ import litellm
 
 from ganesh_backend.services.config import config_service
 
+DEFAULT_PROVIDER: str = "openai"
 DEFAULT_MODEL: str = "gpt-4o-mini"
 
-SUPPORTED_MODELS: tuple[str, ...] = (
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4-turbo",
-    "gpt-3.5-turbo",
+SUPPORTED_PROVIDERS: tuple[str, ...] = (
+    "openai",
+    "anthropic",
+    "google",
+    "openrouter",
 )
+
+PROVIDER_MODELS: dict[str, tuple[str, ...]] = {
+    "openai": (
+        "gpt-4o-mini",
+        "gpt-4o",
+        "gpt-4-turbo",
+        "gpt-3.5-turbo",
+    ),
+    "anthropic": (
+        "claude-3-5-sonnet-20240620",
+        "claude-3-5-haiku-20241022",
+        "claude-3-opus-20240229",
+    ),
+    "google": (
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-2.0-flash",
+    ),
+    "openrouter": (
+        "openai/gpt-4o-mini",
+        "anthropic/claude-3.5-sonnet",
+        "google/gemini-2.0-flash-001",
+    ),
+}
+
+# Environment variable name for each provider's API key fallback.
+_PROVIDER_ENV_VAR: dict[str, str] = {
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GEMINI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+}
 
 
 class MissingAPIKeyError(RuntimeError):
@@ -33,64 +75,124 @@ class LLMError(RuntimeError):
     """Generic LLM call failure (rate limit, invalid model, network, ...)."""
 
 
-@lru_cache(maxsize=1)
-def get_api_key() -> str:
-    """Resolve the OpenAI API key.
+class UnsupportedProviderError(ValueError):
+    """Raised when an unknown provider name is supplied."""
+
+
+def _keyring_key(provider: str) -> str:
+    """Return the keyring username for a provider's API key."""
+    return f"ganesh_api_key_{provider}"
+
+
+@lru_cache(maxsize=None)
+def get_api_key(provider: str = DEFAULT_PROVIDER) -> str:
+    """Resolve the API key for ``provider``.
 
     Order of precedence:
         1. OS keyring (managed by ``config_service``)
-        2. ``OPENAI_API_KEY`` environment variable
+        2. ``{PROVIDER}_API_KEY`` environment variable
 
-    The result is cached for the process lifetime. To force a re-read (e.g.
-    after the user updates the key via the config UI) call
+    The result is cached per-provider for the process lifetime. To force a
+    re-read (e.g. after the user updates the key via the config UI) call
     :func:`reset_api_key_cache`.
     """
-    key = config_service.get_api_key()
-    if not key:
-        raise MissingAPIKeyError(
-            "No OpenAI API key configured. Set one via the config UI or the "
-            "OPENAI_API_KEY environment variable."
+    if provider not in SUPPORTED_PROVIDERS:
+        raise UnsupportedProviderError(
+            f"Unknown provider: {provider!r}. "
+            f"Supported: {', '.join(SUPPORTED_PROVIDERS)}"
         )
+    key = config_service.get_provider_key(provider)
+    if not key:
+        env_var = _PROVIDER_ENV_VAR[provider]
+        key = config_service.get_provider_key_env(provider) or None
+        if not key:
+            raise MissingAPIKeyError(
+                f"No {provider} API key configured. Set one via the config UI "
+                f"or the {env_var} environment variable."
+            )
     return key
 
 
 def reset_api_key_cache() -> None:
-    """Clear the cached API key so the next call re-reads from keyring/env."""
+    """Clear all cached API keys so the next call re-reads from keyring/env."""
     get_api_key.cache_clear()
 
 
-def get_available_models() -> list[str]:
-    """Return the list of models the service can route to."""
-    return list(SUPPORTED_MODELS)
+def _litellm_model_name(provider: str, model: str) -> str:
+    """Translate a (provider, model) pair into a LiteLLM model string.
+
+    LiteLLM uses model-name prefixes to route to non-OpenAI providers. This
+    function applies the required prefix for google (``gemini/``) and
+    openrouter (``openrouter/``) when the caller hasn't already supplied it.
+    """
+    if provider == "google":
+        if not model.startswith("gemini/"):
+            return f"gemini/{model}"
+        return model
+    if provider == "openrouter":
+        if not model.startswith("openrouter/"):
+            return f"openrouter/{model}"
+        return model
+    # openai and anthropic use plain model names (litellm auto-detects claude-).
+    return model
+
+
+def get_available_models(provider: str = DEFAULT_PROVIDER) -> list[str]:
+    """Return the list of models the service can route to for ``provider``."""
+    if provider not in SUPPORTED_PROVIDERS:
+        raise UnsupportedProviderError(
+            f"Unknown provider: {provider!r}. "
+            f"Supported: {', '.join(SUPPORTED_PROVIDERS)}"
+        )
+    return list(PROVIDER_MODELS[provider])
 
 
 def chat_completion(
     messages: list[dict[str, str]],
+    provider: str = DEFAULT_PROVIDER,
     model: str | None = None,
     stream: bool = False,
+    tools: list[dict[str, Any]] | None = None,
 ) -> Any:
     """Call LiteLLM ``completion`` and return the raw response.
 
     Args:
         messages: OpenAI-style message list (``{"role", "content"}``).
-        model: Model name. Defaults to :data:`DEFAULT_MODEL`.
+        provider: One of :data:`SUPPORTED_PROVIDERS`.
+        model: Model name (provider-specific). Defaults to the provider's
+            first entry in :data:`PROVIDER_MODELS`.
         stream: If True, returns a streaming iterator of chunks.
+        tools: Optional list of OpenAI-style tool definitions. LiteLLM
+            normalizes the format for each provider.
 
     Raises:
-        MissingAPIKeyError: No API key configured.
+        UnsupportedProviderError: ``provider`` is not in SUPPORTED_PROVIDERS.
+        MissingAPIKeyError: No API key configured for the provider.
         LLMError: The underlying LiteLLM call failed.
     """
-    chosen_model = model or DEFAULT_MODEL
-    api_key = get_api_key()
+    if provider not in SUPPORTED_PROVIDERS:
+        raise UnsupportedProviderError(
+            f"Unknown provider: {provider!r}. "
+            f"Supported: {', '.join(SUPPORTED_PROVIDERS)}"
+        )
+    chosen_model = model or PROVIDER_MODELS[provider][0]
+    litellm_model = _litellm_model_name(provider, chosen_model)
+    api_key = get_api_key(provider)
+
+    kwargs: dict[str, Any] = {
+        "model": litellm_model,
+        "messages": messages,
+        "stream": stream,
+        "api_key": api_key,
+    }
+    if tools is not None:
+        kwargs["tools"] = tools
 
     try:
-        response = litellm.completion(
-            model=chosen_model,
-            messages=messages,
-            stream=stream,
-            api_key=api_key,
-        )
+        response = litellm.completion(**kwargs)
     except MissingAPIKeyError:
+        raise
+    except UnsupportedProviderError:
         raise
     except Exception as exc:  # noqa: BLE001 - litellm raises many types
         raise LLMError(str(exc)) from exc
@@ -115,3 +217,35 @@ def stream_chunks(response: Any) -> Iterator[str]:
             delta = None
         if delta:
             yield delta
+
+
+def test_connection(provider: str = DEFAULT_PROVIDER) -> bool:
+    """Validate the provider's API key by making a minimal completion call.
+
+    Returns ``True`` on success, ``False`` on any LLM error. Raises
+    :class:`UnsupportedProviderError` for unknown providers (this is a
+    programmer error, not a runtime/config error).
+    """
+    if provider not in SUPPORTED_PROVIDERS:
+        raise UnsupportedProviderError(
+            f"Unknown provider: {provider!r}. "
+            f"Supported: {', '.join(SUPPORTED_PROVIDERS)}"
+        )
+    try:
+        api_key = get_api_key(provider)
+    except MissingAPIKeyError:
+        return False
+
+    litellm_model = _litellm_model_name(
+        provider, PROVIDER_MODELS[provider][0]
+    )
+    try:
+        litellm.completion(
+            model=litellm_model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+            api_key=api_key,
+        )
+    except Exception:  # noqa: BLE001 - any failure means the key is bad
+        return False
+    return True
