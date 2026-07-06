@@ -664,3 +664,38 @@
 - Frontend: 208 tests pass (unchanged)
 - `--check-imports`: passes
 - YAML workflow syntax: valid
+
+## Task 39 — Auto-Update (Tauri Updater Plugin) - 2026-07-05
+
+### Implementation
+- Added `tauri-plugin-updater = "2"` to `src-tauri/Cargo.toml` (resolves to 2.10.1).
+- Plugin initialized in `main.rs` via `tauri_plugin_updater::Builder::new().build()`.
+- Tauri commands in `src-tauri/src/commands/update.rs`: `check_update`, `download_update`, `install_update`, `cancel_update`, `get_update_config`, `set_update_config`.
+- `Update` struct implements `Resource` trait — stored via `app.resources_table().add(update)` which returns a `ResourceId` (u32). Retrieved via `resources_table().get::<Update>(rid)`.
+- Download API: `update.download(on_chunk: FnMut(usize, Option<u64>), on_download_finish: FnOnce()) -> Result<Vec<u8>>`. Install: `update.install(&bytes) -> Result<()>`. These are separate, enabling download→prompt→install-on-quit flow.
+- Cancellation via `Arc<AtomicBool>` checked inside the `on_chunk` callback.
+- Auto-check on launch: spawned in `tauri::async_runtime::spawn` during `setup()`, emits `update://available` event.
+- Frontend: `UpdateNotification.tsx` (banner + progress bar + install button), `UpdateSettings.tsx` (channel selector + auto-check toggle + manual check button), `api/update.ts` (invoke wrappers + event listeners).
+- Backend: Added `update` section to `DEFAULT_CONFIG` in `config.py` with `channel` ("stable"/"beta") and `auto_check` (bool).
+- CI: Build workflow passes `TAURI_UPDATER_PUBKEY`, `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` env vars to `npm run tauri build`. Uploads `.sig` files alongside installers.
+- `tauri.conf.json`: Added `bundle.createUpdaterArtifacts: true` and `plugins.updater` config with endpoint and pubkey placeholder.
+
+### Bug Fix
+- `ConfigService.load_config()` used `DEFAULT_CONFIG.copy()` (shallow) — nested dicts were shared across instances, causing test pollution. Fixed to `copy.deepcopy(DEFAULT_CONFIG)`. Also moved `import copy` to module level (was inline in `get_safe_config`).
+
+### Testable Pure Logic in lib.rs
+- `is_valid_update_channel`, `normalize_update_channel`, `should_auto_check_update`, `is_update_available` (semver with pre-release support), `UpdateChannel` struct, `UpdateConfig` struct.
+- 12 Rust unit tests for update logic (23 total Rust tests pass).
+
+### Test Results
+- Rust: 23 tests pass (cargo test)
+- Frontend: 219 tests pass (was 208, +11 new UpdateNotification tests)
+- Backend: 213 tests pass (was 200, +13 new update config tests)
+- `tsc --noEmit`: clean
+- `cargo check`: clean
+
+### Key Decisions
+- `UpdateChannel` as a struct wrapping `String` (not enum) for simpler serde serialization and normalization.
+- `is_update_available` uses semver parsing with pre-release awareness: `1.0.0-beta < 1.0.0` (pre-release has lower precedence).
+- Download and install are separate commands (not `download_and_install`) to support the "prompt user → install on quit" flow.
+- No delta updates (full replace only, per task constraints). No forced updates (always user-initiated).

@@ -30,6 +30,19 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://releases.ganesh.ai/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": "${TAURI_UPDATER_PUBKEY}",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

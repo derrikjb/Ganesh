@@ -9,6 +9,8 @@
 //! but the core logic lives here so it can be unit-tested with mock sidecar
 //! scripts without booting a full Tauri window.
 
+pub mod commands;
+
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -200,6 +202,99 @@ fn send_term(child: &Child) -> std::io::Result<()> {
     child.kill()
 }
 
+// ---------------------------------------------------------------------------
+// Auto-update
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateChannel {
+    Stable,
+    Beta,
+}
+
+impl UpdateChannel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UpdateChannel::Stable => "stable",
+            UpdateChannel::Beta => "beta",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UpdateConfig {
+    pub channel: UpdateChannel,
+    pub auto_check: bool,
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        Self {
+            channel: UpdateChannel::Stable,
+            auto_check: true,
+        }
+    }
+}
+
+pub fn parse_update_channel(s: &str) -> Option<UpdateChannel> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "stable" => Some(UpdateChannel::Stable),
+        "beta" => Some(UpdateChannel::Beta),
+        _ => None,
+    }
+}
+
+pub fn select_endpoint<'a>(
+    endpoints: &'a [(&'static str, &'a str)],
+    channel: UpdateChannel,
+) -> Option<&'a str> {
+    endpoints
+        .iter()
+        .find(|(c, _)| {
+            parse_update_channel(c).map(|ch| ch == channel).unwrap_or(false)
+        })
+        .map(|(_, url)| *url)
+}
+
+pub fn should_auto_check(config: &UpdateConfig) -> bool {
+    config.auto_check
+}
+
+pub fn compare_versions(current: &str, available: &str) -> std::cmp::Ordering {
+    let parse = |s: &str| -> Vec<u64> {
+        s.trim()
+            .trim_start_matches('v')
+            .split(|c: char| !c.is_ascii_digit())
+            .filter(|p| !p.is_empty())
+            .filter_map(|p| p.parse::<u64>().ok())
+            .collect()
+    };
+    let cur = parse(current);
+    let avl = parse(available);
+    let len = cur.len().max(avl.len());
+    for i in 0..len {
+        let c = cur.get(i).copied().unwrap_or(0);
+        let a = avl.get(i).copied().unwrap_or(0);
+        match c.cmp(&a) {
+            std::cmp::Ordering::Equal => continue,
+            ord => return ord,
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
+pub fn is_update_available(current: &str, available: &str) -> bool {
+    compare_versions(current, available) == std::cmp::Ordering::Less
+}
+
+pub fn build_endpoint_url(template: &str, channel: UpdateChannel, current_version: &str, target: &str) -> String {
+    template
+        .replace("{{channel}}", channel.as_str())
+        .replace("{{current_version}}", current_version)
+        .replace("{{target}}", target)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,5 +475,130 @@ mod tests {
             should_minimize_to_tray(),
             "close button must minimize to tray, not quit"
         );
+    }
+
+    #[test]
+    fn test_parse_update_channel_valid() {
+        assert_eq!(parse_update_channel("stable"), Some(UpdateChannel::Stable));
+        assert_eq!(parse_update_channel("beta"), Some(UpdateChannel::Beta));
+        assert_eq!(parse_update_channel("  Stable "), Some(UpdateChannel::Stable));
+        assert_eq!(parse_update_channel("BETA"), Some(UpdateChannel::Beta));
+    }
+
+    #[test]
+    fn test_parse_update_channel_invalid() {
+        assert_eq!(parse_update_channel("nightly"), None);
+        assert_eq!(parse_update_channel(""), None);
+        assert_eq!(parse_update_channel("alpha"), None);
+    }
+
+    #[test]
+    fn test_update_channel_as_str() {
+        assert_eq!(UpdateChannel::Stable.as_str(), "stable");
+        assert_eq!(UpdateChannel::Beta.as_str(), "beta");
+    }
+
+    #[test]
+    fn test_update_config_default() {
+        let cfg = UpdateConfig::default();
+        assert_eq!(cfg.channel, UpdateChannel::Stable);
+        assert!(cfg.auto_check);
+    }
+
+    #[test]
+    fn test_should_auto_check() {
+        assert!(should_auto_check(&UpdateConfig { channel: UpdateChannel::Stable, auto_check: true }));
+        assert!(!should_auto_check(&UpdateConfig { channel: UpdateChannel::Beta, auto_check: false }));
+    }
+
+    #[test]
+    fn test_select_endpoint_matches_channel() {
+        let endpoints: &[(&'static str, &str)] = &[
+            ("stable", "https://releases.ganesh.ai/stable"),
+            ("beta", "https://releases.ganesh.ai/beta"),
+        ];
+        assert_eq!(select_endpoint(endpoints, UpdateChannel::Stable), Some("https://releases.ganesh.ai/stable"));
+        assert_eq!(select_endpoint(endpoints, UpdateChannel::Beta), Some("https://releases.ganesh.ai/beta"));
+    }
+
+    #[test]
+    fn test_select_endpoint_no_match() {
+        let endpoints: &[(&'static str, &str)] = &[("stable", "https://releases.ganesh.ai/stable")];
+        assert_eq!(select_endpoint(endpoints, UpdateChannel::Beta), None);
+    }
+
+    #[test]
+    fn test_select_endpoint_empty() {
+        let endpoints: &[(&'static str, &str)] = &[];
+        assert_eq!(select_endpoint(endpoints, UpdateChannel::Stable), None);
+    }
+
+    #[test]
+    fn test_compare_versions_equal() {
+        assert_eq!(compare_versions("0.1.0", "0.1.0"), std::cmp::Ordering::Equal);
+        assert_eq!(compare_versions("1.0.0", "1.0.0"), std::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn test_compare_versions_less() {
+        assert_eq!(compare_versions("0.1.0", "0.2.0"), std::cmp::Ordering::Less);
+        assert_eq!(compare_versions("1.0.0", "1.0.1"), std::cmp::Ordering::Less);
+        assert_eq!(compare_versions("0.9.9", "1.0.0"), std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_compare_versions_greater() {
+        assert_eq!(compare_versions("0.2.0", "0.1.0"), std::cmp::Ordering::Greater);
+        assert_eq!(compare_versions("2.0.0", "1.9.9"), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn test_compare_versions_strips_v_prefix() {
+        assert_eq!(compare_versions("v0.1.0", "0.1.0"), std::cmp::Ordering::Equal);
+        assert_eq!(compare_versions("v1.0.0", "v0.9.0"), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn test_compare_versions_different_length() {
+        assert_eq!(compare_versions("1.0", "1.0.0"), std::cmp::Ordering::Equal);
+        assert_eq!(compare_versions("1.0.0", "1.0.1"), std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_is_update_available() {
+        assert!(is_update_available("0.1.0", "0.2.0"));
+        assert!(!is_update_available("0.2.0", "0.1.0"));
+        assert!(!is_update_available("0.1.0", "0.1.0"));
+    }
+
+    #[test]
+    fn test_build_endpoint_url_substitutes_placeholders() {
+        let url = build_endpoint_url(
+            "https://releases.ganesh.ai/{{target}}/{{current_version}}/{{channel}}",
+            UpdateChannel::Beta,
+            "0.1.0",
+            "linux-x86_64",
+        );
+        assert_eq!(url, "https://releases.ganesh.ai/linux-x86_64/0.1.0/beta");
+    }
+
+    #[test]
+    fn test_build_endpoint_url_no_placeholders() {
+        let url = build_endpoint_url(
+            "https://releases.ganesh.ai/static.json",
+            UpdateChannel::Stable,
+            "0.1.0",
+            "linux",
+        );
+        assert_eq!(url, "https://releases.ganesh.ai/static.json");
+    }
+
+    #[test]
+    fn test_update_config_serde_roundtrip() {
+        let cfg = UpdateConfig { channel: UpdateChannel::Beta, auto_check: false };
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let back: UpdateConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(cfg, back);
+        assert!(json.contains("\"beta\""));
     }
 }

@@ -5,9 +5,10 @@ use ganesh_lib::{
     self as lib, shutdown_sidecar, spawn_sidecar, SidecarState, DEFAULT_SHUTDOWN_TIMEOUT,
     HOTKEY_TOGGLE, TRAY_HIDE_ID, TRAY_QUIT_ID, TRAY_SHOW_ID,
 };
+use ganesh_lib::commands::update::UpdateState;
 use std::path::PathBuf;
 use tauri::{
-    image::Image, menu::{Menu, MenuItem}, tray::{MouseButton, TrayIconEvent}, Manager, RunEvent, WindowEvent,
+    image::Image, menu::{Menu, MenuItem}, tray::{MouseButton, TrayIconEvent}, Emitter, Manager, RunEvent, WindowEvent,
 };
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
@@ -109,6 +110,7 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 fn build_app() -> tauri::Builder<tauri::Wry> {
     let state = SidecarState::new();
+    let update_state = UpdateState::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -116,8 +118,18 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             show_main_window(app);
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
-        .invoke_handler(tauri::generate_handler![get_sidecar_port])
+        .manage(update_state)
+        .invoke_handler(tauri::generate_handler![
+            get_sidecar_port,
+            ganesh_lib::commands::update::check_update,
+            ganesh_lib::commands::update::download_update,
+            ganesh_lib::commands::update::install_update,
+            ganesh_lib::commands::update::cancel_update,
+            ganesh_lib::commands::update::get_update_config,
+            ganesh_lib::commands::update::set_update_config,
+        ])
         .setup(|app| {
             let state = app.state::<SidecarState>();
             if let Err(e) = spawn_and_store_sidecar(&state) {
@@ -130,6 +142,28 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
             global.on_shortcut(HOTKEY_TOGGLE, move |app, _shortcut, _event| {
                 toggle_main_window(app);
             })?;
+
+            let update_state = app.state::<UpdateState>();
+            let config = update_state.config.lock().unwrap().clone();
+            if lib::should_auto_check(&config) {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri_plugin_updater::UpdaterExt;
+                    let updater = match handle.updater() {
+                        Ok(u) => u,
+                        Err(_) => return,
+                    };
+                    match updater.check().await {
+                        Ok(Some(u)) => {
+                            let current = handle.package_info().version.to_string();
+                            if lib::is_update_available(&current, &u.version) {
+                                let _ = handle.emit("update://available", u.version.clone());
+                            }
+                        }
+                        _ => {}
+                    }
+                });
+            }
 
             Ok(())
         })

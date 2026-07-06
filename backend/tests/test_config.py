@@ -62,3 +62,62 @@ def test_json_override(temp_config_dir):
     (temp_config_dir / "config.json").write_text(json.dumps({"llm": {"model": "json-model"}}))
     service = ConfigService()
     assert service.get_setting("llm.model") == "json-model"
+
+
+def test_update_config_defaults(temp_config_dir):
+    service = ConfigService()
+    assert service.get_setting("update.channel") == "stable"
+    assert service.get_setting("update.auto_check") is True
+
+
+def test_update_config_set_channel(temp_config_dir):
+    service = ConfigService()
+    service.set_setting("update.channel", "beta")
+    assert service.get_setting("update.channel") == "beta"
+
+
+def test_update_config_set_auto_check(temp_config_dir):
+    service = ConfigService()
+    service.set_setting("update.auto_check", False)
+    assert service.get_setting("update.auto_check") is False
+
+
+def test_update_config_persists(temp_config_dir):
+    service = ConfigService()
+    service.set_setting("update.channel", "beta")
+    service.set_setting("update.auto_check", False)
+
+    with open(temp_config_dir / "config.yaml", "r") as f:
+        data = yaml.safe_load(f)
+    assert data["update"]["channel"] == "beta"
+    assert data["update"]["auto_check"] is False
+
+
+def test_update_config_safe(temp_config_dir):
+    service = ConfigService()
+    safe = service.get_safe_config()
+    assert "update" in safe
+    assert safe["update"]["channel"] == "stable"
+    assert safe["update"]["auto_check"] is True
+
+def test_update_config_defaults(temp_config_dir):
+    service = ConfigService()
+    assert service.get_setting("update.channel") == "stable"
+    assert service.get_setting("update.auto_check") is True
+
+def test_update_config_set_channel(temp_config_dir):
+    service = ConfigService()
+    service.set_setting("update.channel", "beta")
+    assert service.get_setting("update.channel") == "beta"
+
+def test_update_config_set_auto_check(temp_config_dir):
+    service = ConfigService()
+    service.set_setting("update.auto_check", False)
+    assert service.get_setting("update.auto_check") is False
+
+def test_update_config_in_safe_config(temp_config_dir):
+    service = ConfigService()
+    safe = service.get_safe_config()
+    assert "update" in safe
+    assert safe["update"]["channel"] == "stable"
+    assert safe["update"]["auto_check"] is True

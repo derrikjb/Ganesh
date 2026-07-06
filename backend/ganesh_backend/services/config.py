@@ -1,5 +1,6 @@
 import os
 import json
+import copy
 import yaml
 import keyring
 from pathlib import Path
@@ -38,6 +39,10 @@ DEFAULT_CONFIG = {
         },
         "locked": [],
     },
+    "update": {
+        "channel": "stable",       # stable | beta
+        "auto_check": True,        # check for updates on launch
+    },
 }
 
 CONFIG_DIR = Path.home() / ".ganesh"
@@ -53,7 +58,7 @@ class ConfigService:
     def load_config(self) -> Dict[str, Any]:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-        config = DEFAULT_CONFIG.copy()
+        config = copy.deepcopy(DEFAULT_CONFIG)
 
         if YAML_CONFIG_PATH.exists():
             with open(YAML_CONFIG_PATH, "r") as f:
@@ -152,7 +157,6 @@ class ConfigService:
                 base[k] = v
 
     def get_safe_config(self) -> Dict[str, Any]:
-        import copy
         safe_config = copy.deepcopy(self._config)
         if "llm" in safe_config and "api_key" in safe_config["llm"]:
             safe_config["llm"]["api_key"] = None
