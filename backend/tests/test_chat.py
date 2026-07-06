@@ -122,7 +122,7 @@ def test_chat_missing_api_key():
                 json={"messages": [{"role": "user", "content": "hello"}]},
             )
     assert response.status_code == 401
-    assert "no key" in response.json()["detail"]
+    assert "API key" in response.json()["detail"]
 
 
 def test_chat_invalid_model():
