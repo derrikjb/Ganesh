@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
+import { PatternSuggestion } from './PatternSuggestion'
+import type { PatternSuggestionData } from './PatternSuggestion'
 import { useChat } from '../hooks/useChat'
 import { useAccessibility } from '../contexts/AccessibilityContext'
+import { sidecarFetch } from '../api'
 import type { ChatMessage as ChatMessageType } from '../types/chat'
 import type { OpenDocument } from '../types/documents'
 
@@ -68,6 +71,37 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const [patternSuggestion, setPatternSuggestion] = useState<PatternSuggestionData | null>(null)
+
+  const fetchSuggestion = useCallback(async (context: string) => {
+    if (!context.trim()) return
+    try {
+      const res = await sidecarFetch('/api/patterns/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context, limit: 1 }),
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as { suggestion: PatternSuggestionData | null }
+      if (data.suggestion) {
+        setPatternSuggestion(data.suggestion)
+      }
+    } catch {
+      // Suggestion is non-critical; silently ignore errors.
+    }
+  }, [])
+
+  const handleSuggestionAction = useCallback(
+    async (action: 'accept' | 'decline' | 'disable', patternId: string) => {
+      try {
+        await sidecarFetch(`/api/patterns/${patternId}/${action}`, { method: 'POST' })
+      } catch {
+        // Best-effort; dismiss regardless.
+      }
+      setPatternSuggestion(null)
+    },
+    [],
+  )
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -86,6 +120,13 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages, streamingContent, showScrollButton])
+
+  useEffect(() => {
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user')
+    if (lastUser && !isStreaming) {
+      void fetchSuggestion(lastUser.content)
+    }
+  }, [messages, isStreaming, fetchSuggestion])
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current
@@ -172,6 +213,15 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
             </button>
           </div>
         </div>
+      )}
+
+      {patternSuggestion && (
+        <PatternSuggestion
+          suggestion={patternSuggestion}
+          onAccept={(id) => void handleSuggestionAction('accept', id)}
+          onDecline={(id) => void handleSuggestionAction('decline', id)}
+          onDisable={(id) => void handleSuggestionAction('disable', id)}
+        />
       )}
 
       <div className="relative px-4 py-3 border-t border-border bg-bg-primary">

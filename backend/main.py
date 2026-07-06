@@ -40,6 +40,7 @@ from ganesh_backend.routers.continuity import router as continuity_router
 from ganesh_backend.routers.personality import router as personality_router
 from ganesh_backend.routers.profiles import router as profiles_router
 from ganesh_backend.routers.emotion import router as emotion_router
+from ganesh_backend.routers.patterns import router as patterns_router
 
 # Tauri v2 webview origins. On Windows the webview uses https://tauri.localhost,
 # on Linux/macOS it uses tauri://localhost. Both must be allowed for CORS.
@@ -132,6 +133,8 @@ def create_app() -> FastAPI:
     app.include_router(profiles_router)
 
     app.include_router(emotion_router)
+
+    app.include_router(patterns_router)
 
     app.include_router(continuity_router)
 

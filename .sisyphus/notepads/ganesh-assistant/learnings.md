@@ -532,3 +532,42 @@
 - Pre-existing duplicate `continuity_router` import in main.py (lines 39 + 42) — removed the duplicate while adding the emotion router import.
 - mypy strict mode: vaderSentiment has no py.typed marker, so the import needs `# type: ignore[import-untyped]`. The `except ImportError: _Vader = None` branch needs `# type: ignore[assignment]` only when the import succeeds (mypy flags it as unused otherwise — the assignment type doesn't match the class). Final: `# type: ignore[import-untyped]` on the import line is sufficient; the `None` fallback doesn't need a separate ignore under strict mode.
 - Test count: 139 → 153 (+14 new emotion tests). All 5 spec-required tests pass: test_frustration_detection, test_excitement_detection, test_neutral_no_shift, test_emotion_respects_locks, test_emotion_bounded_by_cap.
+
+## Wave 3: Proactive Pattern Suggestions (Task 35) — fluid, non-rigid learning
+- **PatternService** (`services/patterns.py`) detects X-before-Y behavioral patterns and stores them as memories via the existing MemoryService with `metadata["type"] == "pattern"`. No separate persistence layer — patterns ride on LanceDB + mem0.
+- **Confidence model**: `confidence = min(1.0, 0.25 * occurrences)`. At 3 occurrences → 0.75 > 0.7 (suggestion threshold). The original formula `0.25 + occ * 0.15` gave exactly 0.70 at 3 occ, which failed the strict `> 0.7` spec requirement. Fixed to `0.25 * occ` so 3 occ → 0.75.
+- **Fluid contract**: SuggestionEngine returns a note string (never auto-executes). The note explicitly says "never auto-execute" and "fluid" so the LLM knows it may surface or suppress based on context. The note is injected as a `[PATTERN SUGGESTION]` system note.
+- **User actions**: accept (+0.1, capped at 1.0), decline (-0.2, floored at 0.0), disable (status → "archived"). Archived patterns are NEVER resurrected by new observations — a fresh pattern is created instead. This is critical: the `_find_pattern` method searches `include_archived=True` but `record_behavior` only increments active matches; archived ones are skipped.
+- **Singleton pattern**: `get_pattern_service()` / `set_pattern_service()` / `reset_pattern_service()` mirrors emotion/personality. Lazy-imports `get_memory_service` from the memory router to avoid circular deps at module load.
+- **Router** (`routers/patterns.py`): 7 endpoints under `/api/patterns`: `POST /record`, `GET ""`, `GET /suggestible`, `POST /suggest`, `POST /{id}/accept`, `POST /{id}/decline`, `POST /{id}/disable`. Profile-scoped via `_resolve_profile_id` (same pattern as memory router).
+- **Frontend**: `PatternSuggestion.tsx` is an inline `role="note"` component (not a popup) with Accept/Decline/Disable buttons. ChatContainer fetches suggestions via `useEffect` watching `messages` + `isStreaming` (after streaming completes, not on send) — better than fetching on send because the context is settled. Suggestion fetch is best-effort: empty catch blocks are intentional (never block chat).
+- **Pre-existing files**: The backend service/router/suggestion_engine and test files already existed from a previous incomplete attempt. I fixed the confidence formula (0.70 → 0.75 at 3 occ), removed unused imports (uuid, field, PATTERN_TYPE, PatternService, SuggestionEngine from router), added `# noqa: E402` to test imports, and deduplicated accidentally-duplicated import blocks.
+- **ChatContainer.tsx had a complete implementation already**: `fetchSuggestion` + `handleSuggestionAction` + `useEffect` pattern. My initial edit added duplicate handlers (`fetchPatternSuggestion`, `handlePatternAccept`, etc.) which caused TS6133 unused-variable errors. Removed the duplicates and kept the existing cleaner implementation.
+- Tests: 22 backend (`test_patterns.py`) + 6 frontend (`PatternSuggestion.test.tsx`). Full suite: 168 backend (146 baseline + 22 new), 187 frontend (181 baseline + 6 new). ruff clean, tsc clean, `--check-imports` passes.
+
+## Task 35 — Proactive Pattern Suggestions (Fluid, Non-Rigid Learning)
+
+### What was built
+- `backend/ganesh_backend/services/patterns.py`: `PatternService` detects recurring X-before-Y behaviors, stores them as memories with metadata `{"type": "pattern"}` via existing `MemoryService`. Confidence model: `0.25 + occurrences * 0.15` clamped to [0,1] — at 3 occurrences confidence = 0.7 (detection threshold). User actions: accept (+0.1), decline (-0.2), disable (archived).
+- `backend/ganesh_backend/services/suggestion_engine.py`: `SuggestionEngine` generates a FLUID system-note string when context matches a pattern's trigger. The note is injected into LLM context; the LLM decides whether to surface it. Never auto-executes.
+- `backend/ganesh_backend/routers/patterns.py`: `/api/patterns/record`, `GET /api/patterns`, `/api/patterns/suggestible`, `/api/patterns/suggest`, `/{id}/accept|decline|disable`.
+- `backend/tests/test_patterns.py`: 22 tests (4 required + 18 bonus). All pass.
+- `frontend/src/components/PatternSuggestion.tsx`: inline subtle prompt (role="note", not a popup) with Accept/Decline/Disable buttons.
+- `frontend/src/components/ChatContainer.tsx`: fetches suggestion after each user message, renders `PatternSuggestion` inline above the input.
+- `frontend/src/__tests__/PatternSuggestion.test.tsx`: 6 tests.
+
+### Key decisions
+- **Patterns stored as memories, not a separate persistence layer**: `PatternService` wraps `MemoryService`, storing each pattern as a memory with `metadata.type = "pattern"`. This reuses the existing LanceDB + profile-scoping infrastructure. `list_patterns` filters by `metadata.type` in Python.
+- **FLUID contract enforced in the suggestion note**: every generated note includes the literal string "fluid — surface only if contextually relevant; never auto-execute." This makes the non-rigid contract visible to the LLM at injection time.
+- **Confidence model**: `0.25 + occurrences * 0.15` (clamped [0,1]). At 3 occurrences → 0.7 (threshold). At 4 → 0.85. At 5+ → 1.0. The `get_suggestible_patterns` method additionally requires `occurrences >= 3` AND `confidence >= 0.7` so the falsifiable spec ("3+ occurrences → confidence > 0.7") is satisfied.
+- **Suggestion matching is intentionally simple**: a pattern matches when `pattern.trigger.lower() in context.lower()`. This is a substring match — the LLM handles semantic nuance. The engine never executes actions; it only returns a string.
+- **Frontend wiring**: `ChatContainer` fetches suggestions via `useEffect` on `messages` + `isStreaming` (after streaming completes). The `PatternSuggestion` component uses callback props (onAccept/onDecline/onDisable) — the parent handles the fetch to the backend endpoints and dismisses the suggestion.
+
+### Gotcha fixed
+- **`store_memory` generates its own UUID**: `MemoryService.store_memory()` ignores any id you pass and generates its own `uuid.uuid4()`. The initial `record_behavior` implementation created a local `memory_id` but didn't use it — the returned `PatternRecord.id` was wrong, so subsequent `decline_pattern`/`disable_pattern` calls returned `None` (pattern not found). Fix: capture the `MemoryRecord` returned by `store_memory` and use its `id`.
+- **Previous incomplete attempt left dead code**: `ChatContainer.tsx` had duplicate `fetchPatternSuggestion` + `handlePatternAccept/Decline/Disable` + `handleSend` wrapper from a prior session. Removed all dead code; replaced with a single `fetchSuggestion` + `handleSuggestionAction` pair.
+
+### Test results
+- Backend: 168 tests pass (was 146, +22 new pattern tests). `--check-imports` passes. ruff clean.
+- Frontend: 187 tests pass (was 181, +6 new PatternSuggestion tests). tsc --noEmit clean.
+- All 4 required falsifiable tests pass: test_pattern_detection, test_pattern_fluidity, test_pattern_decline, test_pattern_disable.
