@@ -2633,7 +2633,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 38. Installer Variants (Minimal + Full with Pre-bundled Models)
+- [x] 38. Installer Variants (Minimal + Full with Pre-bundled Models)
 
   **What to do**:
   - Create two PyInstaller build configs:
