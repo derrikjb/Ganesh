@@ -20,6 +20,7 @@ from starlette.responses import StreamingResponse
 
 from ganesh_backend.services.model_manager import (
     REQUIRED_MODELS,
+    DiskFullError,
     ModelManager,
     get_model_manager,
     reset_model_manager,
@@ -49,6 +50,13 @@ class PauseResumeResponse(BaseModel):
     status: str
 
 
+class DiskSpaceResponse(BaseModel):
+    free_bytes: int
+    name: str
+    required_bytes: int
+    has_space: bool
+
+
 def _manager() -> ModelManager:
     return get_model_manager()
 
@@ -69,6 +77,25 @@ async def status() -> StatusResponse:
     return StatusResponse(models=models, all_present=all(m.present for m in models))
 
 
+@router.get("/disk-space")
+async def disk_space() -> dict[str, object]:
+    return _manager().check_disk_space()
+
+
+@router.get("/disk-space/{name}", response_model=DiskSpaceResponse)
+async def disk_space(name: str) -> DiskSpaceResponse:
+    if name not in REQUIRED_MODELS:
+        raise HTTPException(status_code=404, detail=f"Unknown model: {name}")
+    mgr = _manager()
+    has_space, free, required = mgr.has_space_for(name)
+    return DiskSpaceResponse(
+        free_bytes=free,
+        name=name,
+        required_bytes=required,
+        has_space=has_space,
+    )
+
+
 @router.post("/download")
 async def download(req: DownloadRequest) -> dict[str, str]:
     if req.name not in REQUIRED_MODELS:
@@ -78,6 +105,8 @@ async def download(req: DownloadRequest) -> dict[str, str]:
     async def _run() -> None:
         try:
             await mgr.download_model(req.name)
+        except DiskFullError:
+            pass
         except Exception:
             pass
 

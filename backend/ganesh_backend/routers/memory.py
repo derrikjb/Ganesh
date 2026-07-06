@@ -7,6 +7,9 @@ GET    /api/memory          — retrieve memories (semantic search via ?query=)
 GET    /api/memory/list     — list all memories for the active profile
 PUT    /api/memory/{id}     — update a memory
 DELETE /api/memory/{id}     — delete a memory
+GET    /api/memory/integrity  — probe LanceDB integrity (Task 40)
+POST   /api/memory/repair     — re-index from JSON backup (Task 40)
+POST   /api/memory/reset      — archive corrupted DB, start fresh (Task 40)
 
 All operations are scoped by ``profile_id``. The active profile is read from
 the :class:`ProfileManager` singleton; callers may override it with the
@@ -106,6 +109,23 @@ class ListResponse(BaseModel):
     memories: list[MemoryResponse]
 
 
+class IntegrityResponse(BaseModel):
+    healthy: bool
+    schema_version_expected: int
+    schema_version_found: Optional[int] = None
+    error: Optional[str] = None
+
+
+class RepairResponse(BaseModel):
+    restored: int
+    backup_path: Optional[str] = None
+
+
+class ResetResponse(BaseModel):
+    archived: bool
+    message: str
+
+
 @router.post("", response_model=MemoryResponse, status_code=201)
 async def store_memory(
     req: StoreMemoryRequest,
@@ -142,6 +162,46 @@ async def list_memories(
     pid = _resolve_profile_id(profile_id)
     records = service.list_memories(profile_id=pid)
     return ListResponse(memories=[MemoryResponse(**r.to_dict()) for r in records])
+
+
+@router.get("/integrity", response_model=IntegrityResponse)
+async def check_integrity() -> IntegrityResponse:
+    service = get_memory_service()
+    report = service.check_integrity()
+    return IntegrityResponse(**report)
+
+
+@router.get("/health", response_model=IntegrityResponse)
+async def memory_health() -> IntegrityResponse:
+    service = get_memory_service()
+    report = service.check_integrity()
+    return IntegrityResponse(**report)
+
+
+@router.post("/repair", response_model=RepairResponse)
+async def repair_memory() -> RepairResponse:
+    service = get_memory_service()
+    backup_path = service._backup_path()
+    if backup_path is None or not backup_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No backup file found. Cannot repair without a backup.",
+        )
+    try:
+        restored = service.repair_from_backup(backup_path)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RepairResponse(restored=restored, backup_path=str(backup_path))
+
+
+@router.post("/reset", response_model=ResetResponse)
+async def reset_memory() -> ResetResponse:
+    service = get_memory_service()
+    archived = service.reset(archive=True)
+    return ResetResponse(
+        archived=archived,
+        message="Memory database archived and reset to a fresh state.",
+    )
 
 
 @router.put("/{memory_id}", response_model=MemoryResponse)

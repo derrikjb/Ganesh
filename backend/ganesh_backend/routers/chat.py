@@ -1,4 +1,13 @@
-"""Chat router: POST /chat with optional SSE streaming."""
+"""Chat router: POST /chat with optional SSE streaming.
+
+Error handling (Task 40):
+    - ``MissingAPIKeyError`` → HTTP 401 with a friendly message prompting
+      the user to re-enter their API key in settings. The sidecar does NOT
+      crash — the error is surfaced as a normal HTTP response.
+    - LiteLLM ``AuthenticationError`` (raised when a previously-valid key is
+      revoked/rotated) is also mapped to 401 with the same friendly message.
+    - All other LLM errors → HTTP 400 with the underlying message.
+"""
 from __future__ import annotations
 
 import json
@@ -11,6 +20,22 @@ from pydantic import BaseModel, Field
 from ganesh_backend.services import llm as llm_service
 
 router = APIRouter(tags=["chat"])
+
+_INVALID_KEY_MESSAGE = (
+    "Your API key is invalid or has been revoked. "
+    "Open Settings → Providers to update your API key."
+)
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    """Detect LiteLLM/SDK authentication errors (rotated/revoked keys)."""
+    msg = str(exc).lower()
+    if "authenticationerror" in msg or "invalid_api_key" in msg:
+        return True
+    if "401" in msg and ("api key" in msg or "unauthorized" in msg):
+        return True
+    type_name = type(exc).__name__
+    return type_name in {"AuthenticationError", "PermissionDeniedError"}
 
 
 class ChatMessage(BaseModel):
@@ -55,10 +80,15 @@ async def chat(req: ChatRequest) -> Any:
             stream=False,
         )
     except llm_service.MissingAPIKeyError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=401,
+            detail=f"API key invalid or missing: {exc}",
+        ) from exc
     except llm_service.UnsupportedProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except llm_service.LLMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except llm_service.UnsupportedProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
@@ -81,12 +111,27 @@ def _stream_response(req: ChatRequest) -> Any:
             stream=True,
         )
     except llm_service.MissingAPIKeyError as exc:
-        yield _sse_chunk({"error": str(exc)}, event="error")
+        yield _sse_chunk(
+            {"error": f"API key invalid or missing: {exc}", "code": 401},
+            event="error",
+        )
         return
     except llm_service.UnsupportedProviderError as exc:
         yield _sse_chunk({"error": str(exc)}, event="error")
         return
     except llm_service.LLMError as exc:
+        yield _sse_chunk({"error": str(exc)}, event="error")
+        return
+    except llm_service.LLMError as exc:
+        if _is_auth_error(exc):
+            llm_service.reset_api_key_cache()
+            yield _sse_chunk(
+                {"error": _INVALID_KEY_MESSAGE, "code": 401}, event="error"
+            )
+        else:
+            yield _sse_chunk({"error": str(exc)}, event="error")
+        return
+    except llm_service.UnsupportedProviderError as exc:
         yield _sse_chunk({"error": str(exc)}, event="error")
         return
 
