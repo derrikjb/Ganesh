@@ -4,10 +4,22 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'Installer variant (minimal | full | both)'
+        required: false
+        default: 'both'
 
 jobs:
-  build:
+  # ---------------------------------------------------------------------------
+  # Minimal installer variant (Task 38).
+  # No models bundled — first-run download (Task 22).
+  # ---------------------------------------------------------------------------
+  build-minimal:
+    name: Minimal (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -44,21 +56,140 @@ jobs:
           cd ../frontend
           npm install
 
-      - name: Build PyInstaller Sidecar
+      - name: Build Minimal Installer (PyInstaller)
+        shell: bash
         run: |
-          cd backend
-          pyinstaller --onefile main.py --name ganesh-backend
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -File scripts/build-minimal.ps1 -SkipTauri
+          else
+            scripts/build-minimal.sh --skip-tauri
+          fi
 
       - name: Build Tauri App
+        shell: bash
         run: |
           npm install -g @tauri-apps/cli
           npm run tauri build
 
-      - name: Upload Artifacts
+      - name: Upload Minimal Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ganesh-${{ matrix.os }}
+          name: ganesh-minimal-${{ matrix.os }}
           path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            backend/dist/ganesh-backend
+            backend/dist/ganesh-backend.exe
+
+      - name: Release (Minimal)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+
+  # ---------------------------------------------------------------------------
+  # Full installer variant (Task 38).
+  # Pre-bundles whisper base + piper voice + embedding model in dist/models/.
+  # Models are pre-downloaded via cache (NO download during build itself).
+  # ---------------------------------------------------------------------------
+  build-full:
+    name: Full (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'backend/requirements.txt'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install Dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt pyinstaller
+          cd ../frontend
+          npm install
+
+      # --- Pre-bundled models (cached, NOT downloaded during build) ----------
+      # The full variant requires pre-downloaded model files. We restore them
+      # from a cache that must be populated externally (e.g. by a prior
+      # workflow run or a manual cache-seeding step). The build script will
+      # fail with exit code 3 if the models are missing — this is intentional
+      # and enforces the "no download during build" contract.
+      - name: Restore Pre-bundled Models Cache
+        id: cache-models
+        uses: actions/cache@v4
+        with:
+          path: backend/prebuilt_models
+          key: ganesh-models-${{ runner.os }}-v1
+          fail-on-cache-miss: false
+
+      - name: Build Full Installer (PyInstaller + models)
+        if: steps.cache-models.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell -File scripts/build-full.ps1 -SkipTauri
+          else
+            scripts/build-full.sh --skip-tauri
+          fi
+
+      - name: Skip Full Build (models not cached)
+        if: steps.cache-models.outputs.cache-hit != 'true'
+        run: |
+          echo "Pre-bundled models cache miss — skipping full installer build."
+          echo "Populate the 'ganesh-models-${{ runner.os }}-v1' cache to enable full builds."
+          exit 0
+
+      - name: Build Tauri App
+        shell: bash
+        run: |
+          npm install -g @tauri-apps/cli
+          npm run tauri build
+
+      - name: Upload Full Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ganesh-full-${{ matrix.os }}
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            backend/dist/ganesh-backend
+            backend/dist/ganesh-backend.exe
+            backend/dist/models/
+
+      - name: Release (Full)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*.AppImage

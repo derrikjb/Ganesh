@@ -47,6 +47,94 @@ These will be added to the registry and the PyInstaller spec as they land:
 The `pyinstaller.spec` already contains commented-out `collect_all` /
 `collect_dynamic_libs` blocks for each of these — uncomment when the dep is added.
 
+## Installer Variants (Task 38)
+
+Ganesh ships two installer variants, each driven by a dedicated PyInstaller
+spec and a pair of build scripts (Linux `.sh` + Windows `.ps1`):
+
+| Variant | Spec | Models bundled | First-run download |
+|---------|------|----------------|--------------------|
+| **minimal** | `backend/pyinstaller-minimal.spec` | None | Required (Task 22) |
+| **full** | `backend/pyinstaller-full.spec` | `stt.bin`, `tts.onnx`, `embeddings.bin` in `dist/models/` | Optional (offline-capable) |
+
+### Build scripts
+
+| Script | Variant | Platform |
+|--------|---------|----------|
+| `scripts/build-minimal.sh` | minimal | Linux |
+| `scripts/build-minimal.ps1` | minimal | Windows |
+| `scripts/build-full.sh` | full | Linux |
+| `scripts/build-full.ps1` | full | Windows |
+
+### Pre-bundled models (full variant)
+
+The full variant does **NOT** download models during the build. Models must
+be pre-downloaded into the directory pointed to by `GANESH_MODELS_SRC`
+(default: `backend/prebuilt_models/`) before invoking the build script.
+
+Expected files:
+
+| File | Description |
+|------|-------------|
+| `stt.bin` | faster-whisper base model (CTranslate2 format) |
+| `tts.onnx` | piper default voice (ONNX format) |
+| `embeddings.bin` | sentence embeddings (all-MiniLM-L6-v2) |
+
+### CI
+
+`.github/workflows/ci.yml` defines a `build-variants` job with an
+`OS × variant` matrix (`windows-latest`, `ubuntu-latest` × `minimal`, `full`).
+`.github/workflows/build.yml` (tag-triggered release builds) uses the same
+matrix and uploads minimal/full artifacts separately. No macOS builds.
+
+## Installer Variants (Task 38)
+
+Ganesh ships two installer variants, each driven by its own PyInstaller spec:
+
+| Variant | Spec file | Models bundled | First-run behavior |
+|---------|-----------|----------------|--------------------|
+| **Minimal** | `backend/pyinstaller-minimal.spec` | None | Downloads models on first run (Task 22) |
+| **Full** | `backend/pyinstaller-full.spec` | `stt.bin`, `tts.onnx`, `embeddings.bin` in `dist/models/` | Runs offline immediately |
+
+### Minimal spec
+
+The minimal spec collects the same native Python runtimes (pydantic, uvicorn,
+piper, faster-whisper, ...) as the full spec but **never** adds `.onnx` /
+`.bin` model weight files to `datas`. A `MINIMAL_EXCLUDES` tuple and an
+`_is_model_weight` filter strip any model files that `collect_all()` might
+accidentally pull in from package data directories.
+
+### Full spec
+
+The full spec reads pre-downloaded model files from the directory pointed to
+by `GANESH_MODELS_SRC` (default: `backend/prebuilt_models/`) and adds them
+to `datas` with destination `models/`. The build scripts
+(`scripts/build-full.sh` / `scripts/build-full.ps1`) verify the three required
+model files exist before invoking PyInstaller and copy them to
+`backend/dist/models/` for Tauri resource bundling.
+
+**The full variant does NOT download models during the build.** Models must
+be pre-downloaded (e.g. via CI cache or a manual `model_manager` run) before
+invoking the build script.
+
+### Build scripts
+
+| Script | Platform | Variant |
+|--------|----------|---------|
+| `scripts/build-minimal.sh` | Linux | Minimal |
+| `scripts/build-minimal.ps1` | Windows | Minimal |
+| `scripts/build-full.sh` | Linux | Full |
+| `scripts/build-full.ps1` | Windows | Full |
+
+### CI (`.github/workflows/build.yml`)
+
+The release workflow defines `build-minimal` and `build-full` jobs, each with
+an OS matrix (`windows-latest`, `ubuntu-latest`). The full job caches
+pre-bundled models across runs to avoid re-downloading. Artifacts are
+uploaded separately as `ganesh-minimal-<os>` and `ganesh-full-<os>`.
+
+No macOS builds (Task 38 constraint).
+
 ## System Dependencies
 
 ### Linux (Ubuntu/Debian)

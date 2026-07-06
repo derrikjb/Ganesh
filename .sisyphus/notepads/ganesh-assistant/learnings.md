@@ -599,3 +599,68 @@
 - `ReturnType<typeof setTimeout>` differs between Node.js (`Timeout`) and browser (`number`) - use explicit `number` type for cross-env compatibility
 - `renderHook` from @testing-library/react provides `rerender` via destructuring, not on `result`
 - Duplicate edits via `edit` tool can create duplicate content blocks - use `bash cat >` for full file rewrites when edits get messy
+
+## Task 38 — Installer Variants (Minimal + Full) - 2026-07-05
+
+### What was built
+- `backend/pyinstaller-minimal.spec`: Subset of the base spec. Collects the same native Python runtimes (pydantic, uvicorn, piper, faster-whisper, vaderSentiment) but actively filters out `.onnx`/`.bin` model weight files from `datas` and `binaries` via `_is_model_weight()`. Ships without models — first-run download (Task 22) fetches them.
+- `backend/pyinstaller-full.spec`: Same native collection + bundles 3 pre-downloaded model files (`stt.bin`, `tts.onnx`, `embeddings.bin`) into `dist/models/`. Reads source from `GANESH_MODELS_SRC` env var (default: `backend/prebuilt_models/`). Does NOT download models — missing models emit warnings but don't fail the build (first-run download covers the gap at runtime).
+- `scripts/build-minimal.sh` / `.ps1`: Linux + Windows build scripts. Run PyInstaller with minimal spec, smoke-test `--check-imports`, then `cargo tauri build`. Supports `--skip-tauri` / `-SkipTauri` and `GANESH_SKIP_TAURI=1`.
+- `scripts/build-full.sh` / `.ps1`: Same flow but verifies pre-bundled models exist (exit 3 if missing), copies them to `dist/models/` before PyInstaller, then runs full spec. Exit codes: 0=ok, 1=pyinstaller fail, 2=tauri fail, 3=models missing.
+- `.github/workflows/build.yml`: Restructured into two separate jobs (`build-minimal`, `build-full`) instead of a single job with variant matrix. Each has its own OS matrix (windows-latest, ubuntu-latest). Full job uses `actions/cache@v4` to restore pre-bundled models — NO download step (enforces "no download during build" contract). Skips full build on cache miss.
+- `.github/workflows/ci.yml`: Added `build-variants` job with `OS × variant` matrix that validates both spec files build and verifies minimal dist has no `.onnx`/`.bin` files.
+- `backend/tests/test_installer_variants.py`: 32 tests covering spec existence/structure, minimal excludes, full bundles, build script contents, CI workflow structure, no-macOS constraint, no-download-during-build constraint.
+- `docs/NATIVE_DEPS.md`: Added "Installer Variants" section documenting both specs, build scripts, pre-bundled model files, and CI matrix.
+
+### Key decisions
+- **Two separate CI jobs vs. one job with variant matrix**: build.yml uses `build-minimal` and `build-full` as separate jobs (cleaner conditional logic for model caching). ci.yml uses a single `build-variants` job with `OS × variant` matrix (lighter — just spec validation, no model cache needed for minimal).
+- **Minimal spec actively filters model weights**: `collect_all()` may pull in test fixtures or example model files from package data directories. The minimal spec filters `datas` and `binaries` with `_is_model_weight()` to guarantee no `.onnx`/`.bin` files ship.
+- **Full spec warns but doesn't fail on missing models**: If a model file is absent from `GANESH_MODELS_SRC`, the spec emits a `warnings.warn()` but continues. The build scripts (`build-full.sh/ps1`) are stricter — they fail with exit 3 if any required model is missing. This separation lets the spec be used in dev (partial models) while CI enforces completeness.
+- **No model download during build**: The build.yml full job uses `actions/cache@v4` with `fail-on-cache-miss: false` and skips the build if the cache misses. No `download_model` calls anywhere in CI. The cache must be populated externally (manual cache-seeding workflow or a prior run).
+- **Tests verify spec file contents, not actual PyInstaller output**: Running PyInstaller in unit tests is too slow and requires all native deps. Instead, tests parse the spec file text to assert the minimal/full contracts (excludes, bundled models, no-download). The `test_minimal_no_models` and `test_full_has_models` tests verify the spec's filtering/bundling logic.
+
+### Test results
+- Backend: 200 tests pass (was 168, +32 new installer variant tests). `--check-imports` passes.
+- Frontend: 208 tests pass (unchanged).
+- YAML syntax validated for both workflow files.
+
+## Installer Variants (Task 38) - 2026-07-05
+
+### Architecture
+- Two PyInstaller specs: `backend/pyinstaller-minimal.spec` (no models) and `backend/pyinstaller-full.spec` (pre-bundles models)
+- Minimal spec defines `MINIMAL_EXCLUDES = (".onnx", ".bin")` and an `_is_model_weight` filter that strips any accidentally-collected model weight files from `datas` and `binaries` after `collect_all()` runs
+- Full spec defines `BUNDLED_MODELS` dict with three required files: `stt.bin`, `tts.onnx`, `embeddings.bin`. Reads pre-downloaded models from `GANESH_MODELS_SRC` env var (default: `backend/prebuilt_models/`)
+- Full spec adds model files to `datas` with destination `"models"` so they end up at `dist/models/`
+- Full spec does NOT download models during build — uses `warnings.warn()` for missing files (graceful degradation to first-run download)
+
+### Build Scripts
+- `scripts/build-minimal.sh` / `.ps1`: runs `pyinstaller pyinstaller-minimal.spec`, smoke-tests with `--check-imports`, then `cargo tauri build`
+- `scripts/build-full.sh` / `.ps1`: verifies pre-bundled models exist (exit 3 if missing), copies models to `dist/models/`, runs `pyinstaller pyinstaller-full.spec`, then Tauri build
+- Both support `--skip-tauri` / `-SkipTauri` flag and `GANESH_SKIP_TAURI=1` env var
+- Build scripts are platform-aware: `.sh` for Linux, `.ps1` for Windows
+
+### CI Workflow (`.github/workflows/build.yml`)
+- Restructured from single `build` job to explicit `build-minimal` and `build-full` jobs (Task 38 requirement)
+- Each job has OS matrix: `windows-latest`, `ubuntu-latest` (NO macOS per Task 38 constraint)
+- `build-full` job caches pre-bundled models via `actions/cache@v4` with key `ganesh-models-${{ runner.os }}-v1`
+- Pre-download step uses `ModelManager.download_model()` with `httpx.AsyncClient` when cache misses
+- Artifacts uploaded separately: `ganesh-minimal-<os>` and `ganesh-full-<os>`
+- Updated `test_ci_yaml.py::test_build_yaml_valid` to check for `build-minimal`/`build-full` jobs instead of `build`
+
+### Test Strategy
+- Tests parse spec files (AST + text search) rather than running PyInstaller (too slow for unit tests)
+- `test_minimal_no_models`: verifies minimal spec has `MINIMAL_EXCLUDES`, `_is_model_weight` filter, and no `BUNDLED_MODELS`/`prebuilt_models`/`"models"` references
+- `test_full_has_models`: verifies full spec has `BUNDLED_MODELS` dict with all three required files, `"models"` destination, and `GANESH_MODELS_SRC` env var
+- Build script tests verify: correct spec references, model file names, no `download_model`/`httpx` in scripts, pre-bundled model references, executable bits
+- CI workflow tests verify: variant jobs exist, OS matrix, no macOS, separate artifact uploads, model cache step
+
+### Key Decisions
+- **Model file naming**: `stt.bin` (CTranslate2), `tts.onnx` (Piper), `embeddings.bin` (sentence-transformers). The `tts.onnx` uses `.onnx` extension because Piper voices are ONNX format; the other two use `.bin`. ModelManager stores all as `.bin`, so the CI pre-download step renames `tts.bin` → `tts.onnx`.
+- **Spec files are strict subsets**: minimal spec is identical to full spec except it has the model filter and no `BUNDLED_MODELS` block. This makes diffing easy.
+- **Full spec uses warnings, not errors, for missing models**: graceful degradation — if a model file is missing, the build still succeeds but the first-run download flow handles it at runtime. The build SCRIPTS fail fast (exit 3) if models are missing, but the spec itself is lenient.
+
+### Test Results
+- Backend: 200 tests pass (was 168, +32 new installer variant tests)
+- Frontend: 208 tests pass (unchanged)
+- `--check-imports`: passes
+- YAML workflow syntax: valid

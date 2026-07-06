@@ -20,9 +20,14 @@ def test_build_yaml_valid():
         data = yaml.safe_load(f)
     assert data["name"] == "Build"
     assert "jobs" in data
-    assert "build" in data["jobs"]
-    assert "strategy" in data["jobs"]["build"]
-    assert "matrix" in data["jobs"]["build"]["strategy"]
-    assert "os" in data["jobs"]["build"]["strategy"]["matrix"]
-    assert "windows-latest" in data["jobs"]["build"]["strategy"]["matrix"]["os"]
-    assert "ubuntu-latest" in data["jobs"]["build"]["strategy"]["matrix"]["os"]
+    # Task 38: build.yml defines build-minimal and build-full jobs
+    # (matrix: OS × variant) for Windows + Linux release artifacts.
+    assert "build-minimal" in data["jobs"]
+    assert "build-full" in data["jobs"]
+    for job_name in ("build-minimal", "build-full"):
+        job = data["jobs"][job_name]
+        assert "strategy" in job
+        assert "matrix" in job["strategy"]
+        assert "os" in job["strategy"]["matrix"]
+        assert "windows-latest" in job["strategy"]["matrix"]["os"]
+        assert "ubuntu-latest" in job["strategy"]["matrix"]["os"]
