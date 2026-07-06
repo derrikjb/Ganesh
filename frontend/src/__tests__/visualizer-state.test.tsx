@@ -229,4 +229,73 @@ describe('VisualizerCanvas State Transitions', () => {
       vi.useRealTimers();
     }
   });
+
+  it('THINKING visual state is distinct from IDLE — different render params passed to plugin', () => {
+    const { restore } = mockCanvasContext();
+    const { fireAll, restore: restoreRaf } = mockRequestAnimationFrame();
+    try {
+      const { unmount: unmount1 } = render(
+        <VisualizerCanvas
+          plugin={mockPlugin}
+          audioData={emptyAudio}
+          state="THINKING"
+        />
+      );
+
+      act(() => { fireAll(1000); });
+
+      const renderFn = mockPlugin.render as ReturnType<typeof vi.fn>;
+      const call = renderFn.mock.calls[0][0];
+      expect(call.state).toBe('THINKING');
+      expect(call.timeMs).toBeGreaterThan(0);
+
+      vi.clearAllMocks();
+      unmount1();
+
+      render(
+        <VisualizerCanvas
+          plugin={mockPlugin}
+          audioData={emptyAudio}
+          state="IDLE"
+        />
+      );
+
+      act(() => { fireAll(2000); });
+
+      const idleCall = renderFn.mock.calls[0][0];
+      expect(idleCall.state).toBe('IDLE');
+      expect(idleCall.timeMs).toBeGreaterThan(0);
+    } finally {
+      restore();
+      restoreRaf();
+    }
+  });
+
+  it('transitions to THINKING when LLM processing starts (state prop)', () => {
+    const { restore } = mockCanvasContext();
+    const { fireAll, restore: restoreRaf } = mockRequestAnimationFrame();
+    try {
+      const { rerender } = render(
+        <VisualizerCanvas plugin={mockPlugin} audioData={emptyAudio} />
+      );
+
+      act(() => { fireAll(0); });
+      expect(document.querySelector('canvas')).toHaveAttribute('data-state', 'IDLE');
+
+      rerender(
+        <VisualizerCanvas
+          plugin={mockPlugin}
+          audioData={emptyAudio}
+          state="THINKING"
+        />
+      );
+      act(() => { fireAll(100); });
+
+      const canvas = document.querySelector('canvas');
+      expect(canvas).toHaveAttribute('data-state', 'THINKING');
+    } finally {
+      restore();
+      restoreRaf();
+    }
+  });
 });

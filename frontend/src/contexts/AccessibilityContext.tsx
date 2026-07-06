@@ -17,6 +17,7 @@ export interface AccessibilityState {
   reducedMotion: boolean
   naturalPacingEnabled: boolean
   naturalPacingSpeed: SpeedMultiplier
+  showThinkingIndicator: boolean
 }
 
 export interface AccessibilityContextValue extends AccessibilityState {
@@ -26,6 +27,7 @@ export interface AccessibilityContextValue extends AccessibilityState {
   setReducedMotion: (enabled: boolean) => void
   setNaturalPacingEnabled: (enabled: boolean) => void
   setNaturalPacingSpeed: (speed: SpeedMultiplier) => void
+  setShowThinkingIndicator: (enabled: boolean) => void
   reset: () => void
 }
 
@@ -38,6 +40,7 @@ const DEFAULT_STATE: AccessibilityState = {
   reducedMotion: false,
   naturalPacingEnabled: true,
   naturalPacingSpeed: 1,
+  showThinkingIndicator: true,
 }
 
 const AccessibilityContext = createContext<AccessibilityContextValue | undefined>(undefined)
@@ -61,6 +64,7 @@ function readStoredState(): AccessibilityState {
       reducedMotion: Boolean(parsed.reducedMotion),
       naturalPacingEnabled: parsed.naturalPacingEnabled !== undefined ? Boolean(parsed.naturalPacingEnabled) : true,
       naturalPacingSpeed: validSpeed,
+      showThinkingIndicator: parsed.showThinkingIndicator !== undefined ? Boolean(parsed.showThinkingIndicator) : true,
     }
   } catch {
     return DEFAULT_STATE
@@ -119,6 +123,10 @@ export function AccessibilityProvider({ children }: AccessibilityProviderProps) 
     setState((prev) => ({ ...prev, naturalPacingSpeed: speed }))
   }, [])
 
+  const setShowThinkingIndicator = useCallback((enabled: boolean) => {
+    setState((prev) => ({ ...prev, showThinkingIndicator: enabled }))
+  }, [])
+
   const reset = useCallback(() => {
     setState(DEFAULT_STATE)
   }, [])
@@ -131,6 +139,7 @@ export function AccessibilityProvider({ children }: AccessibilityProviderProps) 
     setReducedMotion,
     setNaturalPacingEnabled,
     setNaturalPacingSpeed,
+    setShowThinkingIndicator,
     reset,
   }
 

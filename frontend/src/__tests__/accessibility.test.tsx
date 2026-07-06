@@ -5,6 +5,7 @@ import {
   AccessibilityProvider,
   useAccessibility,
 } from '../contexts/AccessibilityContext'
+import { VisualizerStateProvider } from '../contexts/VisualizerStateContext'
 import { AccessibilitySettings } from '../components/AccessibilitySettings'
 import { ChatContainer } from '../components/ChatContainer'
 import { ChatInput } from '../components/ChatInput'
@@ -30,7 +31,11 @@ function StateProbe() {
 }
 
 function renderWithProvider(ui: React.ReactNode) {
-  return render(<AccessibilityProvider>{ui}</AccessibilityProvider>)
+  return render(
+    <AccessibilityProvider>
+      <VisualizerStateProvider>{ui}</VisualizerStateProvider>
+    </AccessibilityProvider>
+  )
 }
 
 describe('AccessibilityContext', () => {
