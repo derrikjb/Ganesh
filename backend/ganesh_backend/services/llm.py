@@ -247,6 +247,18 @@ def chat_completion(
     except UnsupportedProviderError:
         raise
     except Exception as exc:  # noqa: BLE001 - litellm raises many types
+        msg = str(exc).lower()
+        if (
+            "authentication" in msg
+            or "unauthorized" in msg
+            or "invalid api key" in msg
+            or "401" in msg
+            or "invalid_api_key" in msg
+        ):
+            raise MissingAPIKeyError(
+                f"The configured API key for {provider!r} is invalid or has "
+                f"been revoked. Please re-enter it in Settings."
+            ) from exc
         raise LLMError(str(exc)) from exc
 
     return response

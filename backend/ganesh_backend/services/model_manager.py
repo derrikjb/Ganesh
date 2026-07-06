@@ -5,15 +5,18 @@ Downloads use HTTP ``Range`` requests to resume from a ``.part`` file.
 SHA-256 checksums are verified after the download completes; a mismatch
 raises ``ValueError`` and removes the partial file.
 
-The manager is HTTP-client-pluggable (``client`` parameter on
-``download_model``) so tests can inject an ``httpx.MockTransport``-backed
-client and avoid real network traffic.
+Disk-full handling: :meth:`check_disk_space` returns free bytes on the
+models partition. :meth:`download_model` catches ``OSError`` with ``ENOSPC``
+during writes and transitions the progress to ``status="disk_full"`` so
+the UI can prompt the user to clean up or cancel.
 """
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import os
+import shutil
 import threading
 import time
 from dataclasses import dataclass, field
@@ -25,6 +28,14 @@ import httpx
 DEFAULT_MODELS_DIR = Path.home() / ".ganesh" / "models"
 
 CHUNK_SIZE = 64 * 1024
+
+# Safety multiplier: warn if free space < 2x the model size so there's room
+# for the .part file plus the final rename.
+DISK_SPACE_SAFETY_MULTIPLIER = 2
+
+
+class DiskFullError(RuntimeError):
+    """Raised when the filesystem cannot accommodate the model download."""
 
 
 @dataclass
@@ -151,6 +162,39 @@ class ModelManager:
                 result[name] = True
         return result
 
+    def check_disk_space(self) -> dict[str, object]:
+        """Return free/total/used bytes on the models partition.
+
+        Also returns ``sufficient`` (bool): True if free bytes >= 2x the
+        largest required model size (or unknown-size models). The 2x margin
+        guards against the download + decompression peak.
+        """
+        usage = shutil.disk_usage(self._models_dir)
+        max_model_size = max((s.size for s in self._specs.values()), default=0)
+        threshold = max_model_size * 2 if max_model_size > 0 else 0
+        sufficient = threshold == 0 or usage.free >= threshold
+        return {
+            "free": usage.free,
+            "total": usage.total,
+            "used": usage.used,
+            "threshold": threshold,
+            "sufficient": sufficient,
+        }
+
+    def has_space_for(self, name: str) -> tuple[bool, int, int]:
+        """Check whether there's enough free space to download ``name``.
+
+        Returns ``(has_space, free_bytes, required_bytes)`` where
+        ``required_bytes = spec.size * DISK_SPACE_SAFETY_MULTIPLIER``.
+        """
+        if name not in self._specs:
+            raise KeyError(f"Unknown model: {name}")
+        spec = self._specs[name]
+        usage = shutil.disk_usage(self._models_dir)
+        free = usage.free
+        required = spec.size * DISK_SPACE_SAFETY_MULTIPLIER
+        return (free >= required, free, required)
+
     @staticmethod
     def _sha256_file(path: Path) -> str:
         h = hashlib.sha256()
@@ -177,6 +221,21 @@ class ModelManager:
         progress = self._progress[name]
         progress.update(status="downloading", error=None)
 
+        if spec.size > 0:
+            space = self.check_disk_space()
+            if not space["sufficient"]:
+                progress.update(
+                    status="disk_full",
+                    error=(
+                        f"Insufficient disk space: need {space['threshold']} bytes, "
+                        f"have {space['free']} bytes. Free space before downloading."
+                    ),
+                )
+                raise DiskFullError(
+                    f"Insufficient disk space for {name}: need {space['threshold']}, "
+                    f"have {space['free']}"
+                )
+
         part_path = self._part_path_for(name)
         final_path = self._path_for(name)
 
@@ -185,6 +244,11 @@ class ModelManager:
 
         try:
             await self._download_with_resume(spec, part_path, cli, progress)
+            if progress.status == "disk_full":
+                raise DiskFullError(
+                    f"Disk full while downloading {name}: "
+                    f"{progress.error or 'no space left on device'}"
+                )
             progress.update(status="verifying")
             digest = self._sha256_file(part_path)
             if spec.checksum and digest != spec.checksum:
@@ -196,6 +260,15 @@ class ModelManager:
             part_path.replace(final_path)
             progress.update(status="completed")
             return True
+        except OSError as exc:
+            if exc.errno == errno.ENOSPC:
+                progress.update(
+                    status="disk_full",
+                    error="Disk full. Free space or cancel the download.",
+                )
+            else:
+                progress.update(status="failed", error=str(exc))
+            raise
         except httpx.HTTPError as exc:
             progress.update(status="failed", error=str(exc))
             raise
@@ -230,7 +303,17 @@ class ModelManager:
             mode = "ab" if existing > 0 else "wb"
             start_time = time.monotonic()
             bytes_written = existing
-            with open(part_path, mode) as f:
+            try:
+                f = open(part_path, mode)
+            except OSError as exc:
+                if exc.errno == errno.ENOSPC:
+                    progress.update(
+                        status="disk_full",
+                        error="Insufficient disk space to write the model file.",
+                    )
+                    return
+                raise
+            with f:
                 async for chunk in resp.aiter_bytes(CHUNK_SIZE):
                     pause_event = self._pause_events.get(spec.name)
                     while pause_event is not None and pause_event.is_set():
@@ -241,7 +324,17 @@ class ModelManager:
                     cancel_event = self._cancel_events.get(spec.name)
                     if cancel_event is not None and cancel_event.is_set():
                         return
-                    f.write(chunk)
+                    try:
+                        f.write(chunk)
+                    except OSError as exc:
+                        if exc.errno == errno.ENOSPC:
+                            progress.update(
+                                status="disk_full",
+                                error="Disk full while writing the model file. "
+                                "Free space or cancel the download.",
+                            )
+                            raise
+                        raise
                     bytes_written += len(chunk)
                     elapsed = max(time.monotonic() - start_time, 1e-6)
                     speed = (bytes_written - existing) / elapsed

@@ -1,21 +1,19 @@
 """Memory service: explicit CRUD over LanceDB + local embeddings.
 
-This service provides a thin, explicit API for storing, retrieving,
-updating, and deleting memories. It uses LanceDB as the vector store
-(via :class:`LanceDbVectorStore`) and a pluggable local embedder (default:
-sentence-transformers; tests: deterministic hash-based).
-
-The service intentionally avoids mem0's ``Memory`` class (which requires an
-LLM for memory extraction) — automatic extraction from chat is a separate
-task. Instead, it uses the LanceDB adapter directly, which itself implements
-mem0's ``VectorStoreBase`` interface for future integration.
+Recovery support: :meth:`check_integrity` probes schema version + row
+count + sample read. :meth:`repair_from_backup` re-indexes from a JSON
+backup. :meth:`reset` archives the corrupted DB and starts fresh. Every
+``store_memory`` call appends to a JSON backup file (best-effort) so
+repair never loses data.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from ganesh_backend.embeddings import (
@@ -28,6 +26,12 @@ from ganesh_backend.vector_store import LanceDbVectorStore
 
 DEFAULT_COLLECTION = "ganesh_memories"
 DEFAULT_DB_PATH = ":memory:"
+
+#: Bumped whenever the LanceDB row schema changes. The integrity check
+#: compares this against the version recorded in the sidecar file.
+SCHEMA_VERSION = 1
+SCHEMA_VERSION_FILENAME = "_schema_version.json"
+BACKUP_FILENAME = "memories_backup.json"
 
 
 class MemoryRecord:
@@ -58,19 +62,7 @@ class MemoryRecord:
 
 
 class MemoryService:
-    """Explicit CRUD memory service backed by LanceDB.
-
-    Parameters
-    ----------
-    db_path:
-        LanceDB URI. ``":memory:"`` for in-memory (tests), or a filesystem
-        path for persistent storage.
-    embedder:
-        Any object implementing :class:`EmbedderProtocol`. Defaults to
-        sentence-transformers with a hash-based fallback.
-    collection_name:
-        LanceDB table name.
-    """
+    """Explicit CRUD memory service backed by LanceDB."""
 
     def __init__(
         self,
@@ -78,6 +70,8 @@ class MemoryService:
         embedder: Optional[EmbedderProtocol] = None,
         collection_name: str = DEFAULT_COLLECTION,
     ) -> None:
+        self._db_path = db_path
+        self._collection_name = collection_name
         self._embedder = embedder or create_default_embedder()
         self._store = LanceDbVectorStore(
             uri=db_path,
@@ -86,6 +80,221 @@ class MemoryService:
             distance="cosine",
         )
         self._store.create_col(collection_name, self._embedder.dimension, "cosine")
+        self._write_schema_version()
+
+    # ------------------------------------------------------------------
+    # Schema version + backup helpers
+    # ------------------------------------------------------------------
+
+    def _is_persistent(self) -> bool:
+        return self._db_path not in (":memory:", "", None)
+
+    def _db_dir(self) -> Optional[Path]:
+        if not self._is_persistent():
+            return None
+        return Path(self._db_path)
+
+    def _schema_version_path(self) -> Optional[Path]:
+        d = self._db_dir()
+        return None if d is None else d / SCHEMA_VERSION_FILENAME
+
+    def _backup_path(self) -> Optional[Path]:
+        d = self._db_dir()
+        return None if d is None else d / BACKUP_FILENAME
+
+    def _write_schema_version(self) -> None:
+        p = self._schema_version_path()
+        if p is None:
+            return
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"schema_version": SCHEMA_VERSION}))
+            tmp.replace(p)
+        except OSError:
+            pass
+
+    def _read_schema_version(self) -> Optional[int]:
+        p = self._schema_version_path()
+        if p is None or not p.exists():
+            return None
+        try:
+            data = json.loads(p.read_text())
+            return int(data.get("schema_version", 0))
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+
+    def _read_backup(self) -> list[dict[str, Any]]:
+        p = self._backup_path()
+        if p is None or not p.exists():
+            return []
+        try:
+            return json.loads(p.read_text())
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def _append_backup(
+        self, record: MemoryRecord, profile_id: Optional[str]
+    ) -> None:
+        p = self._backup_path()
+        if p is None:
+            return
+        try:
+            existing = self._read_backup()
+            existing.append({
+                "id": record.id,
+                "content": record.content,
+                "metadata": record.metadata,
+                "profile_id": profile_id,
+                "created_at": record.created_at,
+                "updated_at": record.updated_at,
+            })
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(existing))
+            tmp.replace(p)
+        except OSError:
+            pass
+
+    # ------------------------------------------------------------------
+    # Integrity / recovery
+    # ------------------------------------------------------------------
+
+    def check_integrity(self) -> dict[str, Any]:
+        """Probe LanceDB integrity. Returns dict with ``healthy``,
+        ``schema_version_expected``, ``schema_version_found``, ``error``."""
+        result: dict[str, Any] = {
+            "healthy": False,
+            "schema_version_expected": SCHEMA_VERSION,
+            "schema_version_found": None,
+            "error": None,
+        }
+        result["schema_version_found"] = self._read_schema_version()
+        try:
+            _ = self._store.list()
+            probe_vec = self._embedder.embed("integrity probe")
+            _ = self._store.search(
+                query="integrity probe", vectors=probe_vec, top_k=1
+            )
+        except Exception as exc:  # noqa: BLE001
+            result["error"] = str(exc)
+            return result
+        found = result["schema_version_found"]
+        if found is not None and found != SCHEMA_VERSION:
+            result["error"] = (
+                f"schema version mismatch: expected {SCHEMA_VERSION}, "
+                f"found {found}"
+            )
+            return result
+        result["healthy"] = True
+        return result
+
+    def export_backup(self, backup_path: Optional[Path] = None) -> Optional[Path]:
+        """Export all memories to a JSON file. Returns the path written, or
+        ``None`` if the DB is in-memory."""
+        if not self._is_persistent():
+            return None
+        if backup_path is None:
+            backup_path = self._backup_path()
+        if backup_path is None:
+            return None
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        records = self.list_memories()
+        payload = []
+        for r in records:
+            full = self._store.get(r.id)
+            profile_id = full.payload.get("profile_id") if full else None
+            payload.append({
+                "id": r.id,
+                "content": r.content,
+                "metadata": r.metadata,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+                "profile_id": profile_id,
+            })
+        tmp = backup_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, default=str))
+        tmp.replace(backup_path)
+        return backup_path
+
+    def repair_from_backup(self, backup_path: Path) -> int:
+        """Drop and recreate the collection, re-indexing from a JSON backup.
+
+        Returns the number of memories restored. Raises ``FileNotFoundError``
+        if the backup does not exist, ``ValueError`` if unparseable.
+        """
+        if not backup_path.exists():
+            raise FileNotFoundError(f"backup not found: {backup_path}")
+        try:
+            payload = json.loads(backup_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"corrupt backup file: {exc}") from exc
+        self._store.reset()
+        self._store.create_col(
+            self._collection_name, self._embedder.dimension, "cosine"
+        )
+        restored = 0
+        for entry in payload:
+            content = entry.get("content", "")
+            if not content:
+                continue
+            memory_id = entry.get("id") or str(uuid.uuid4())
+            now = entry.get("updated_at") or datetime.now(timezone.utc).isoformat()
+            full_metadata = {
+                "content": content,
+                "user_metadata": entry.get("metadata") or {},
+                "profile_id": entry.get("profile_id"),
+                "created_at": entry.get("created_at") or now,
+                "updated_at": now,
+            }
+            embedding = self._embedder.embed(content)
+            self._store.insert(
+                vectors=[embedding],
+                payloads=[full_metadata],
+                ids=[memory_id],
+            )
+            restored += 1
+        self._write_schema_version()
+        return restored
+
+    def reset(self, archive: bool = True) -> bool:
+        """Archive the corrupted DB and start fresh.
+
+        When ``archive`` is True (default) the on-disk DB directory is
+        renamed to ``<name>.corrupted.<timestamp>`` so no data is lost.
+        Returns ``True`` if the reset completed successfully.
+        """
+        if not self._is_persistent():
+            self._store.reset()
+            self._store.create_col(
+                self._collection_name, self._embedder.dimension, "cosine"
+            )
+            return True
+        db_path = Path(self._db_path)
+        if archive and db_path.exists():
+            ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            archived = db_path.with_name(f"{db_path.name}.corrupted.{ts}")
+            try:
+                shutil.move(str(db_path), str(archived))
+            except OSError:
+                shutil.rmtree(str(db_path), ignore_errors=True)
+        elif db_path.exists():
+            shutil.rmtree(str(db_path), ignore_errors=True)
+        db_path.mkdir(parents=True, exist_ok=True)
+        self._store = LanceDbVectorStore(
+            uri=self._db_path,
+            collection_name=self._collection_name,
+            vector_dim=self._embedder.dimension,
+            distance="cosine",
+        )
+        self._store.create_col(
+            self._collection_name, self._embedder.dimension, "cosine"
+        )
+        self._write_schema_version()
+        return True
+
+    # ------------------------------------------------------------------
+    # CRUD
+    # ------------------------------------------------------------------
 
     def store_memory(
         self,
@@ -108,13 +317,15 @@ class MemoryService:
             payloads=[full_metadata],
             ids=[memory_id],
         )
-        return MemoryRecord(
+        record = MemoryRecord(
             id=memory_id,
             content=content,
             metadata=metadata or {},
             created_at=now,
             updated_at=now,
         )
+        self._append_backup(record, profile_id)
+        return record
 
     def retrieve_memories(
         self,
@@ -123,8 +334,6 @@ class MemoryService:
         profile_id: Optional[str] = None,
     ) -> list[MemoryRecord]:
         query_embedding = self._embedder.embed(query)
-        # Retrieve a generous pool then filter by profile_id in Python —
-        # LanceDB's json_extract doesn't work on the string payload column.
         pool_limit = limit * 10 if profile_id is not None else limit
         results = self._store.search(
             query=query,

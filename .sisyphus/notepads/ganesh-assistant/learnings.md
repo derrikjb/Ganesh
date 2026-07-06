@@ -699,3 +699,8 @@
 - `is_update_available` uses semver parsing with pre-release awareness: `1.0.0-beta < 1.0.0` (pre-release has lower precedence).
 - Download and install are separate commands (not `download_and_install`) to support the "prompt user → install on quit" flow.
 - No delta updates (full replace only, per task constraints). No forced updates (always user-initiated).
+
+## Error Recovery Implementation Fixes (Task 40)
+- **Duplicate Imports**: Fixed a TypeScript error caused by duplicate imports of `SidecarStatusBanner` in `App.tsx`.
+- **Test Timeouts**: Resolved Vitest timeouts in `recovery.test.tsx` by making the retry and health check intervals configurable in the `useSidecar` hook. This allows tests to use shorter intervals (e.g., 100ms instead of 2000ms), making them faster and more deterministic.
+- **Test Robustness**: Increased test timeouts for recovery tests to 15s and provided more `ok: true` responses in `mockFetchSequence` to prevent premature `offline` transitions due to extra health check calls during state transitions.
