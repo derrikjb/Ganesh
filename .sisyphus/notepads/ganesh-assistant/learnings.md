@@ -571,3 +571,31 @@
 - Backend: 168 tests pass (was 146, +22 new pattern tests). `--check-imports` passes. ruff clean.
 - Frontend: 187 tests pass (was 181, +6 new PatternSuggestion tests). tsc --noEmit clean.
 - All 4 required falsifiable tests pass: test_pattern_detection, test_pattern_fluidity, test_pattern_decline, test_pattern_disable.
+
+## Natural Response Pacing (Task 36) - 2026-07-05
+
+### Architecture
+- `useNaturalPacing` hook consumes `streamingContent` + `isStreaming` from `useChat`
+- Buffers incoming tokens, releases at ~60 chars/sec (configurable 40-80 range)
+- Thinking pause: 800ms before first token release
+- Paragraph pause: 300ms at `\n\n` boundaries
+- Speed multipliers: 0.5x (30 cps), 1x (60 cps), 2x (120 cps), instant (pass-through)
+- Settings persisted via AccessibilityContext localStorage
+
+### Key Implementation Details
+- Timers are injectable for testability (avoid fake timer issues with async React hooks)
+- Hook uses refs for mutable state (buffer, paced content, timer ID) to avoid stale closures
+- When pacing is off or instant, content passes through immediately (no delay)
+- When streaming ends, all remaining buffered content is released immediately
+- NaturalPacingIndicator component shows "Ganesh is thinking" with pulse dots, then "Ganesh is typing" with animated dots
+
+### Testing Approach
+- Mock timers via injectable `setTimeout`/`clearTimeout` functions
+- `createTimers()` helper captures scheduled timers, `flush()` executes them synchronously
+- Tests verify: pass-through when off, thinking indicator when on, speed scaling, paragraph pauses, streaming end cleanup
+- 10 new tests added, total went from 187 to 197
+
+### Gotchas
+- `ReturnType<typeof setTimeout>` differs between Node.js (`Timeout`) and browser (`number`) - use explicit `number` type for cross-env compatibility
+- `renderHook` from @testing-library/react provides `rerender` via destructuring, not on `result`
+- Duplicate edits via `edit` tool can create duplicate content blocks - use `bash cat >` for full file rewrites when edits get messy
