@@ -1,7 +1,10 @@
+import '@testing-library/jest-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, screen, fireEvent } from '@testing-library/react';
 import { VoiceVisualizer } from '../components/VoiceVisualizer';
 import { list as listPlugins } from '../visualizer/registry';
+import { VisualizerStateProvider } from '../contexts/VisualizerStateContext';
+import { AccessibilityProvider } from '../contexts/AccessibilityContext';
 
 let rafCallbacks: ((time: number) => void)[] = [];
 
@@ -92,7 +95,13 @@ describe('VoiceVisualizer', () => {
     const { restore: restoreRaf } = mockRequestAnimationFrame();
 
     try {
-      render(<VoiceVisualizer />);
+      render(
+        <AccessibilityProvider>
+          <VisualizerStateProvider>
+            <VoiceVisualizer />
+          </VisualizerStateProvider>
+        </AccessibilityProvider>
+      );
 
       const plugins = listPlugins();
       expect(plugins.length).toBeGreaterThanOrEqual(4);

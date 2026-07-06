@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useSidecar } from './useSidecar'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { AccessibilityProvider } from './contexts/AccessibilityContext'
+import { VisualizerStateProvider } from './contexts/VisualizerStateContext'
 import { ChatContainer } from './components/ChatContainer'
 import { ConversationHistory } from './components/ConversationHistory'
 import { WelcomeBanner } from './components/WelcomeBanner'
@@ -117,7 +118,9 @@ function App() {
   return (
     <ThemeProvider>
       <AccessibilityProvider>
-        <AppContent />
+        <VisualizerStateProvider>
+          <AppContent />
+        </VisualizerStateProvider>
       </AccessibilityProvider>
     </ThemeProvider>
   )
