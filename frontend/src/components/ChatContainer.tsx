@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { PatternSuggestion } from './PatternSuggestion'
+import { NaturalPacingIndicator } from './NaturalPacing'
+import { useNaturalPacing } from '../hooks/useNaturalPacing'
 import type { PatternSuggestionData } from './PatternSuggestion'
 import { useChat } from '../hooks/useChat'
 import { useAccessibility } from '../contexts/AccessibilityContext'
@@ -67,11 +69,15 @@ function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
 
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const { messages, isStreaming, streamingContent, error, sendMessage, retryLast, loadConversation } = useChat()
-  const { textOnlyMode } = useAccessibility()
+  const { textOnlyMode, naturalPacingEnabled, naturalPacingSpeed } = useAccessibility()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [patternSuggestion, setPatternSuggestion] = useState<PatternSuggestionData | null>(null)
+
+  const { pacedContent, isThinking, isPacing } = useNaturalPacing(streamingContent, isStreaming, {
+    config: { enabled: naturalPacingEnabled, speedMultiplier: naturalPacingSpeed },
+  })
 
   const fetchSuggestion = useCallback(async (context: string) => {
     if (!context.trim()) return
@@ -141,8 +147,8 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   }, [])
 
   const displayMessages: ChatMessageType[] = messages.map((m) => {
-    if (m.role === 'assistant' && m.id === messages[messages.length - 1]?.id && isStreaming && streamingContent) {
-      return { ...m, content: streamingContent }
+    if (m.role === 'assistant' && m.id === messages[messages.length - 1]?.id && isStreaming) {
+      return { ...m, content: naturalPacingEnabled ? pacedContent : streamingContent }
     }
     return m
   })
@@ -172,7 +178,8 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
             {displayMessages.map((message) => (
               <ChatMessage key={message.id} message={message} onOpenDocument={onOpenDocument} />
             ))}
-            {isStreaming && <StreamingIndicator />}
+            {isStreaming && naturalPacingEnabled && <NaturalPacingIndicator isThinking={isThinking} isPacing={isPacing} />}
+            {isStreaming && !naturalPacingEnabled && <StreamingIndicator />}
             <div ref={messagesEndRef} />
           </>
         )}

@@ -6,6 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
+import type { SpeedMultiplier } from '../hooks/useNaturalPacing'
 
 export type FontSize = 'small' | 'medium' | 'large'
 
@@ -14,6 +15,8 @@ export interface AccessibilityState {
   fontSize: FontSize
   highContrast: boolean
   reducedMotion: boolean
+  naturalPacingEnabled: boolean
+  naturalPacingSpeed: SpeedMultiplier
 }
 
 export interface AccessibilityContextValue extends AccessibilityState {
@@ -21,6 +24,8 @@ export interface AccessibilityContextValue extends AccessibilityState {
   setFontSize: (size: FontSize) => void
   setHighContrast: (enabled: boolean) => void
   setReducedMotion: (enabled: boolean) => void
+  setNaturalPacingEnabled: (enabled: boolean) => void
+  setNaturalPacingSpeed: (speed: SpeedMultiplier) => void
   reset: () => void
 }
 
@@ -31,6 +36,8 @@ const DEFAULT_STATE: AccessibilityState = {
   fontSize: 'medium',
   highContrast: false,
   reducedMotion: false,
+  naturalPacingEnabled: true,
+  naturalPacingSpeed: 1,
 }
 
 const AccessibilityContext = createContext<AccessibilityContextValue | undefined>(undefined)
@@ -41,6 +48,9 @@ function readStoredState(): AccessibilityState {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_STATE
     const parsed = JSON.parse(raw) as Partial<AccessibilityState>
+    const speed = parsed.naturalPacingSpeed
+    const validSpeed: SpeedMultiplier =
+      speed === 0.5 || speed === 1 || speed === 2 || speed === 'instant' ? speed : 1
     return {
       textOnlyMode: Boolean(parsed.textOnlyMode),
       fontSize:
@@ -49,6 +59,8 @@ function readStoredState(): AccessibilityState {
           : 'medium',
       highContrast: Boolean(parsed.highContrast),
       reducedMotion: Boolean(parsed.reducedMotion),
+      naturalPacingEnabled: parsed.naturalPacingEnabled !== undefined ? Boolean(parsed.naturalPacingEnabled) : true,
+      naturalPacingSpeed: validSpeed,
     }
   } catch {
     return DEFAULT_STATE
@@ -99,6 +111,14 @@ export function AccessibilityProvider({ children }: AccessibilityProviderProps) 
     setState((prev) => ({ ...prev, reducedMotion: enabled }))
   }, [])
 
+  const setNaturalPacingEnabled = useCallback((enabled: boolean) => {
+    setState((prev) => ({ ...prev, naturalPacingEnabled: enabled }))
+  }, [])
+
+  const setNaturalPacingSpeed = useCallback((speed: SpeedMultiplier) => {
+    setState((prev) => ({ ...prev, naturalPacingSpeed: speed }))
+  }, [])
+
   const reset = useCallback(() => {
     setState(DEFAULT_STATE)
   }, [])
@@ -109,6 +129,8 @@ export function AccessibilityProvider({ children }: AccessibilityProviderProps) 
     setFontSize,
     setHighContrast,
     setReducedMotion,
+    setNaturalPacingEnabled,
+    setNaturalPacingSpeed,
     reset,
   }
 

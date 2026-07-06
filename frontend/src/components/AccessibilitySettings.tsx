@@ -1,6 +1,8 @@
 import { useAccessibility, type FontSize } from '../contexts/AccessibilityContext'
+import type { SpeedMultiplier } from '../hooks/useNaturalPacing'
 
 const FONT_SIZES: FontSize[] = ['small', 'medium', 'large']
+const SPEED_OPTIONS: SpeedMultiplier[] = [0.5, 1, 2, 'instant']
 
 interface ToggleProps {
   id: string
@@ -52,10 +54,14 @@ export function AccessibilitySettings({ onClose }: AccessibilitySettingsProps) {
     fontSize,
     highContrast,
     reducedMotion,
+    naturalPacingEnabled,
+    naturalPacingSpeed,
     setTextOnlyMode,
     setFontSize,
     setHighContrast,
     setReducedMotion,
+    setNaturalPacingEnabled,
+    setNaturalPacingSpeed,
     reset,
   } = useAccessibility()
 
@@ -131,6 +137,43 @@ export function AccessibilitySettings({ onClose }: AccessibilitySettingsProps) {
         checked={reducedMotion}
         onChange={setReducedMotion}
       />
+
+      <Toggle
+        id="natural-pacing"
+        label="Natural pacing"
+        description="Simulate natural typing rhythm with thinking pauses."
+        checked={naturalPacingEnabled}
+        onChange={setNaturalPacingEnabled}
+      />
+
+      {naturalPacingEnabled && (
+        <div className="py-3">
+          <label
+            htmlFor="pacing-speed"
+            className="text-sm font-medium text-text-primary"
+          >
+            Pacing speed
+          </label>
+          <div className="flex gap-2 mt-2" role="group" aria-label="Pacing speed">
+            {SPEED_OPTIONS.map((speed) => (
+              <button
+                key={speed}
+                type="button"
+                onClick={() => setNaturalPacingSpeed(speed)}
+                className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                  naturalPacingSpeed === speed
+                    ? 'bg-accent text-text-inverse'
+                    : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                }`}
+                data-testid={`pacing-speed-${speed}`}
+                aria-pressed={naturalPacingSpeed === speed}
+              >
+                {speed === 'instant' ? 'Instant' : `${speed}x`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <button
         type="button"
