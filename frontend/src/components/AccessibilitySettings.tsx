@@ -56,12 +56,14 @@ export function AccessibilitySettings({ onClose }: AccessibilitySettingsProps) {
     reducedMotion,
     naturalPacingEnabled,
     naturalPacingSpeed,
+    showThinkingIndicator,
     setTextOnlyMode,
     setFontSize,
     setHighContrast,
     setReducedMotion,
     setNaturalPacingEnabled,
     setNaturalPacingSpeed,
+    setShowThinkingIndicator,
     reset,
   } = useAccessibility()
 
@@ -144,6 +146,14 @@ export function AccessibilitySettings({ onClose }: AccessibilitySettingsProps) {
         description="Simulate natural typing rhythm with thinking pauses."
         checked={naturalPacingEnabled}
         onChange={setNaturalPacingEnabled}
+      />
+
+      <Toggle
+        id="thinking-indicator"
+        label="Thinking indicator"
+        description="Show subtle text indicator when processing."
+        checked={showThinkingIndicator}
+        onChange={setShowThinkingIndicator}
       />
 
       {naturalPacingEnabled && (

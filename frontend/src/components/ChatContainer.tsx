@@ -3,10 +3,12 @@ import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { PatternSuggestion } from './PatternSuggestion'
 import { NaturalPacingIndicator } from './NaturalPacing'
+import { ThinkingIndicator } from './ThinkingIndicator'
 import { useNaturalPacing } from '../hooks/useNaturalPacing'
 import type { PatternSuggestionData } from './PatternSuggestion'
 import { useChat } from '../hooks/useChat'
 import { useAccessibility } from '../contexts/AccessibilityContext'
+import { useVisualizerState } from '../contexts/VisualizerStateContext'
 import { sidecarFetch } from '../api'
 import type { ChatMessage as ChatMessageType } from '../types/chat'
 import type { OpenDocument } from '../types/documents'
@@ -70,14 +72,30 @@ function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const { messages, isStreaming, streamingContent, error, sendMessage, retryLast, loadConversation } = useChat()
   const { textOnlyMode, naturalPacingEnabled, naturalPacingSpeed } = useAccessibility()
+  const { setState: setVisualizerState } = useVisualizerState()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [patternSuggestion, setPatternSuggestion] = useState<PatternSuggestionData | null>(null)
+  const wasStreamingRef = useRef(false)
 
   const { pacedContent, isThinking, isPacing } = useNaturalPacing(streamingContent, isStreaming, {
     config: { enabled: naturalPacingEnabled, speedMultiplier: naturalPacingSpeed },
   })
+
+  useEffect(() => {
+    if (isStreaming) {
+      setVisualizerState('THINKING')
+    } else if (wasStreamingRef.current) {
+      // SPEAKING→IDLE transition gives visualizer a natural wind-down
+      setVisualizerState('SPEAKING')
+      const timer = setTimeout(() => setVisualizerState('IDLE'), 500)
+      return () => clearTimeout(timer)
+    } else {
+      setVisualizerState('IDLE')
+    }
+    wasStreamingRef.current = isStreaming
+  }, [isStreaming, setVisualizerState])
 
   const fetchSuggestion = useCallback(async (context: string) => {
     if (!context.trim()) return
@@ -232,6 +250,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
       )}
 
       <div className="relative px-4 py-3 border-t border-border bg-bg-primary">
+        <ThinkingIndicator visible={isStreaming} />
         <ChatInput onSend={sendMessage} disabled={isStreaming} />
         {showScrollButton && <ScrollToBottomButton onClick={scrollToBottom} />}
       </div>

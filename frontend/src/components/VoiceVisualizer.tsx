@@ -5,6 +5,8 @@ import { WaveformVisualizer } from '../visualizer/plugins/WaveformVisualizer';
 import { FreqBarsVisualizer } from '../visualizer/plugins/FreqBarsVisualizer';
 import { ParticleVisualizer } from '../visualizer/plugins/ParticleVisualizer';
 import { HoloFaceVisualizer } from '../visualizer/plugins/HoloFaceVisualizer';
+import { ThinkingIndicator } from './ThinkingIndicator';
+import { useVisualizerState } from '../contexts/VisualizerStateContext';
 import type { VisualizerPlugin, AudioData, VisualizerState } from '../visualizer/types';
 
 register(WaveformVisualizer);
@@ -28,8 +30,10 @@ export function VoiceVisualizer({ state }: VoiceVisualizerProps = {}) {
   const plugins = useMemo(() => listPlugins(), []);
   const [activeIndex, setActiveIndex] = useState(0);
   const [audioData] = useState<AudioData>(() => generateMockAudioData());
+  const { state: contextState } = useVisualizerState();
 
   const activePlugin: VisualizerPlugin | undefined = plugins[activeIndex];
+  const effectiveState = state ?? contextState;
 
   if (!activePlugin) {
     return (
@@ -68,9 +72,11 @@ export function VoiceVisualizer({ state }: VoiceVisualizerProps = {}) {
         <VisualizerCanvas
           plugin={activePlugin}
           audioData={audioData}
-          state={state}
+          state={effectiveState}
         />
       </div>
+
+      <ThinkingIndicator visible={effectiveState === 'THINKING'} />
     </div>
   );
 }
