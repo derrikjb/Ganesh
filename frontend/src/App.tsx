@@ -6,6 +6,7 @@ import { VisualizerStateProvider } from './contexts/VisualizerStateContext'
 import { ChatContainer } from './components/ChatContainer'
 import { ConversationHistory } from './components/ConversationHistory'
 import { WelcomeBanner } from './components/WelcomeBanner'
+import { SidecarStatusBanner } from './components/SidecarStatus'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { AccessibilitySettings } from './components/AccessibilitySettings'
 import { UpdateNotification } from './components/UpdateNotification'
@@ -13,7 +14,7 @@ import { UpdateSettings } from './components/UpdateSettings'
 import type { ConversationDetail } from './types/conversations'
 
 function AppContent() {
-  const { sidecarUrl, isReady, attempts } = useSidecar()
+  const { sidecarUrl, isReady, attempts, status, restartSidecar } = useSidecar()
   const { theme } = useTheme()
   const [showThemePanel, setShowThemePanel] = useState(false)
   const [showA11yPanel, setShowA11yPanel] = useState(false)
@@ -30,6 +31,7 @@ function AppContent() {
   return (
     <div className="min-h-screen flex flex-col bg-bg-primary text-text-primary">
       <UpdateNotification autoCheckOnMount />
+      <SidecarStatusBanner status={status} attempts={attempts} onRestart={restartSidecar} />
       <header className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div className="flex items-center gap-3">
           <button
@@ -106,6 +108,7 @@ function AppContent() {
         )}
 
         <main className="flex-1 flex flex-col overflow-hidden">
+          <SidecarStatusBanner status={status} attempts={attempts} onRestart={restartSidecar} />
           <WelcomeBanner />
           <ChatContainer documents={[]} onOpenDocument={() => {}} />
         </main>

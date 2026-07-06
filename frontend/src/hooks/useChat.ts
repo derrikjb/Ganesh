@@ -1,6 +1,9 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { sidecarFetch } from '../api'
 import type { AttachedFile, ChatMessage, MessageStatus, UseChatReturn } from '../types/chat'
+
+const MESSAGES_STORAGE_KEY = 'ganesh_chat_messages'
+const CONVERSATION_STORAGE_KEY = 'ganesh_chat_conversation_id'
 
 let messageIdCounter = 0
 function generateId(): string {
@@ -9,6 +12,50 @@ function generateId(): string {
 
 function formatTime(date: Date): Date {
   return new Date(date)
+}
+
+function loadPersistedMessages(): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(MESSAGES_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as ChatMessage[]
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((m) => m && m.id && m.role && typeof m.content === 'string')
+  } catch {
+    return []
+  }
+}
+
+function loadPersistedConversationId(): string | null {
+  try {
+    return localStorage.getItem(CONVERSATION_STORAGE_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+function persistMessages(messages: ChatMessage[]): void {
+  try {
+    const serializable = messages
+      .filter((m) => m.status !== 'sending' && m.status !== 'error')
+      .map((m) => ({
+        ...m,
+        attachedFiles: m.attachedFiles?.map((f) => ({ ...f, content: '' })),
+      }))
+    localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(serializable))
+  } catch {
+  }
+}
+
+function persistConversationId(id: string | null): void {
+  try {
+    if (id) {
+      localStorage.setItem(CONVERSATION_STORAGE_KEY, id)
+    } else {
+      localStorage.removeItem(CONVERSATION_STORAGE_KEY)
+    }
+  } catch {
+  }
 }
 
 async function safeJson<T>(res: Response): Promise<T | null> {
@@ -52,15 +99,23 @@ async function persistMessage(
 }
 
 export function useChat(): UseChatReturn {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadPersistedMessages())
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(() => loadPersistedConversationId())
   const abortRef = useRef<AbortController | null>(null)
   const lastUserMessageRef = useRef<string | null>(null)
   const lastFilesRef = useRef<AttachedFile[] | undefined>(undefined)
-  const conversationIdRef = useRef<string | null>(null)
+  const conversationIdRef = useRef<string | null>(loadPersistedConversationId())
+
+  useEffect(() => {
+    persistMessages(messages)
+  }, [messages])
+
+  useEffect(() => {
+    persistConversationId(conversationId)
+  }, [conversationId])
 
   const updateConversationId = useCallback((id: string | null) => {
     conversationIdRef.current = id
