@@ -2686,7 +2686,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 39. Auto-Update (Tauri Updater Plugin)
+- [x] 39. Auto-Update (Tauri Updater Plugin)
 
   **What to do**:
   - Integrate `tauri-plugin-updater` (crate `tauri-plugin-updater = "2"`):
