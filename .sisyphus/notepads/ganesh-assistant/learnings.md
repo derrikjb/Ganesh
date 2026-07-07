@@ -704,3 +704,41 @@
 - **Duplicate Imports**: Fixed a TypeScript error caused by duplicate imports of `SidecarStatusBanner` in `App.tsx`.
 - **Test Timeouts**: Resolved Vitest timeouts in `recovery.test.tsx` by making the retry and health check intervals configurable in the `useSidecar` hook. This allows tests to use shorter intervals (e.g., 100ms instead of 2000ms), making them faster and more deterministic.
 - **Test Robustness**: Increased test timeouts for recovery tests to 15s and provided more `ok: true` responses in `mockFetchSequence` to prevent premature `offline` transitions due to extra health check calls during state transitions.
+
+## Task 41 Resume (2026-07-07)
+- Backend tests: `cd backend && pytest` (currently 220 passing)
+- Frontend tests: `cd frontend && npm run test:unit -- --run` (currently 229 passing)
+- TypeScript typecheck: `cd frontend && npm run build` (runs `tsc && vite build`)
+- Rust check: `cd src-tauri && cargo check`
+- Real Node.js binary at `/usr/share/cursor/resources/app/resources/helpers/node` — bun shim breaks vitest
+- cargo available at `~/.cargo/bin/`
+- Windows + Linux only, dark theme only
+- All ports must be ephemeral; hardcoded ports forbidden in frontend
+- `scripts/check_bundle_size.py` enforces sidecar/installer size budgets
+
+## Task 41 Resume (2026-07-07)
+- Backend tests: `cd backend && pytest` (currently 220 passing)
+- Frontend tests: `cd frontend && npm run test:unit -- --run` (currently 229 passing)
+- TypeScript typecheck: `cd frontend && npm run build` (runs `tsc && vite build`)
+- Rust check: `cd src-tauri && cargo check`
+- Real Node.js binary at `/usr/share/cursor/resources/app/resources/helpers/node` — bun shim breaks vitest
+- cargo available at `~/.cargo/bin/`
+- Windows + Linux only, dark theme only
+- All ports must be ephemeral; hardcoded ports forbidden in frontend
+- `scripts/check_bundle_size.py` enforces sidecar/installer size budgets
+
+## Wave 3: Bundle Size Budget Enforcement + Final CI Hardening (Task 41)
+- **Bundle Size Budget**: Added `scripts/check_bundle_size.py` to enforce size limits.
+  - Sidecar binary: warn > 150MB, fail > 250MB.
+  - Minimal installer: warn > 100MB, fail > 150MB.
+  - Full installer: warn > 1GB, fail > 1.5GB.
+- **Hardcoded Port Check**: Added CI step and backend test (`backend/tests/test_no_hardcoded_ports.py`) to scan frontend source for hardcoded ports using regex `(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}`.
+- **CI Hardening**:
+  - Separated lint and type-check steps for both Python (ruff, mypy) and TypeScript (eslint, tsc).
+  - Added bundle size checks to both `ci.yml` (sidecar) and `build.yml` (installers).
+  - Updated `backend/tests/test_ci_yaml.py` to assert existence of new CI steps.
+- **Verification**:
+  - `cd backend && pytest` passes (including new port scan and CI YAML tests).
+  - `cd frontend && npm run build` passes (includes tsc and vite build).
+  - `cd src-tauri && cargo check` passes.
+  - Port scan regex finds no matches in `frontend/src/`.

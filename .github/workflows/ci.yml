@@ -50,15 +50,40 @@ jobs:
           cd frontend
           npm install
 
-      - name: Run Preflight
+      - name: Lint Python (ruff)
         run: |
           cd backend
-          # Assuming preflight is a script or command
-          python -m pip install ruff mypy
+          python -m pip install ruff
           ruff check .
+
+      - name: Type Check Python (mypy)
+        run: |
+          cd backend
+          python -m pip install mypy
           mypy .
 
+      - name: Lint TypeScript (eslint)
+        run: |
+          cd frontend
+          npm run lint
+
+      - name: Type Check TypeScript (tsc --noEmit)
+        run: |
+          cd frontend
+          npx tsc --noEmit
+
+      - name: Port Scan
+        shell: bash
+        run: |
+          # Fail if any hardcoded ports found in frontend/src
+          # Regex: (localhost|127.0.0.1|0.0.0.0):\d{2,5}
+          if grep -rE "(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}" frontend/src --include="*.ts" --include="*.tsx"; then
+            echo "ERROR: Hardcoded ports found in frontend/src"
+            exit 1
+          fi
+
       - name: Run Pytest
+
         run: |
           cd backend
           pytest
@@ -98,6 +123,21 @@ jobs:
           pip install pyinstaller
           pyinstaller --onefile main.py --name ganesh-backend
           ./dist/ganesh-backend --check-imports
+
+      - name: Bundle Size Check
+        shell: bash
+        run: |
+          # Check sidecar binary size
+          # Thresholds: warn 150MB, fail 250MB
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            python scripts/check_bundle_size.py --artifact sidecar --path backend/dist/ganesh-backend.exe
+          else
+            python scripts/check_bundle_size.py --artifact sidecar --path backend/dist/ganesh-backend
+          fi
+
+      - name: Bundle Size Check
+        run: |
+          python scripts/check_bundle_size.py --artifact sidecar --path backend/dist/ganesh-backend
 
   build-variants:
     strategy:
@@ -145,6 +185,10 @@ jobs:
         run: |
           cd backend
           pyinstaller pyinstaller-full.spec --noconfirm
+
+      - name: Bundle Size Check
+        run: |
+          python scripts/check_bundle_size.py --artifact sidecar --path backend/dist/ganesh-backend
 
       - name: Verify minimal dist has no model files
         if: matrix.variant == 'minimal'
