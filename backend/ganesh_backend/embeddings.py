@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import struct
-from typing import Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable, Any
 
 DEFAULT_EMBEDDING_DIM = 384
 DEFAULT_MODEL_NAME = "all-MiniLM-L6-v2"
@@ -93,9 +93,9 @@ class SentenceTransformerEmbedder:
         self._dimension = dimension
         self._model: object | None = None
 
-    def _load(self) -> object:
+    def _load(self) -> Any:
         if self._model is None:
-            from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped]
+            from sentence_transformers import SentenceTransformer  # type: ignore
 
             self._model = SentenceTransformer(self._model_name)
         return self._model

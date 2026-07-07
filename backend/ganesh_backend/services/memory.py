@@ -14,7 +14,7 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from ganesh_backend.embeddings import (
     EmbedderProtocol,
@@ -127,7 +127,7 @@ class MemoryService:
         if p is None or not p.exists():
             return []
         try:
-            return json.loads(p.read_text())
+            return cast(list[dict[str, Any]], json.loads(p.read_text()))
         except (OSError, json.JSONDecodeError):
             return []
 

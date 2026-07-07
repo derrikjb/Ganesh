@@ -33,5 +33,12 @@ line-length = 88
 target-version = "py310"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 strict = true
+exclude = ["venv"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true

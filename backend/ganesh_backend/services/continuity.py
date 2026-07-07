@@ -30,7 +30,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 
 # Gap (in seconds) that must elapse between sessions before a welcome-back
@@ -73,7 +73,7 @@ class Session:
     last_topic: Optional[str]
     last_task_id: Optional[str]
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "profile_id": self.profile_id,
@@ -234,7 +234,7 @@ class ContinuityService:
         self,
         profile_id: str,
         now: Optional[float] = None,
-    ) -> Optional[dict[str, object]]:
+    ) -> Optional[dict[str, Any]]:
         """Return a welcome-back payload, or ``None`` if no message applies.
 
         Returns ``None`` when:

@@ -51,7 +51,7 @@ JSON_OVERRIDE_PATH = CONFIG_DIR / "config.json"
 KEYRING_SERVICE = "ganesh"
 
 class ConfigService:
-    def __init__(self):
+    def __init__(self) -> None:
         self._config: Dict[str, Any] = {}
         self.load_config()
 
