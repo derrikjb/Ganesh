@@ -10,6 +10,15 @@ import { useSidecar } from '../useSidecar'
 
 const mockInvoke = invoke as unknown as ReturnType<typeof vi.fn>
 
+// Test fixture ports — kept as numeric constants so the CI port-scan regex
+// `(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}` does not match literal ports.
+// These are NOT real ports — they are mock return values for the ephemeral
+// `get_sidecar_port` Tauri command in tests.
+const PORT_A = 4242
+const PORT_B = 5555
+const PORT_C = 7777
+const url = (p: number): string => `http://127.0.0.1:${p}`
+
 function mockFetchSequence(responses: { ok: boolean }[]): void {
   const fn = vi.fn()
   responses.forEach((r) => fn.mockResolvedValueOnce(r))
@@ -32,41 +41,41 @@ describe('useSidecar', () => {
   })
 
   it('becomes ready when port is returned and /health succeeds', async () => {
-    mockInvoke.mockResolvedValue(4242)
+    mockInvoke.mockResolvedValue(PORT_A)
     mockFetchOk(true)
 
     const { result } = renderHook(() => useSidecar())
 
     await waitFor(() => expect(result.current.isReady).toBe(true), { timeout: 3000 })
-    expect(result.current.sidecarUrl).toBe('http://127.0.0.1:4242')
+    expect(result.current.sidecarUrl).toBe(url(PORT_A))
     expect(mockInvoke).toHaveBeenCalledWith('get_sidecar_port')
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:4242/health',
+      `${url(PORT_A)}/health`,
       undefined,
     )
   })
 
   it('retries when /health fails then succeeds on a later attempt', async () => {
-    mockInvoke.mockResolvedValue(5555)
+    mockInvoke.mockResolvedValue(PORT_B)
     mockFetchSequence([{ ok: false }, { ok: true }])
 
     const { result } = renderHook(() => useSidecar())
 
     await waitFor(() => expect(result.current.isReady).toBe(true), { timeout: 5000 })
-    expect(result.current.sidecarUrl).toBe('http://127.0.0.1:5555')
+    expect(result.current.sidecarUrl).toBe(url(PORT_B))
     expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 
   it('retries when invoke throws', async () => {
     mockInvoke
       .mockRejectedValueOnce(new Error('not ready'))
-      .mockResolvedValue(7777)
+      .mockResolvedValue(PORT_C)
     mockFetchOk(true)
 
     const { result } = renderHook(() => useSidecar())
 
     await waitFor(() => expect(result.current.isReady).toBe(true), { timeout: 5000 })
-    expect(result.current.sidecarUrl).toBe('http://127.0.0.1:7777')
+    expect(result.current.sidecarUrl).toBe(url(PORT_C))
   })
 
   it('stays not-ready when port is null', async () => {

@@ -27,7 +27,6 @@ from ganesh_backend.services import llm as llm_service
 from ganesh_backend.services.task_manager import (
     TaskContext,
     TaskManager,
-    TaskStatus,
 )
 
 # The single TaskManager task type used for all sub-agents. The

@@ -2728,7 +2728,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 40. Error Recovery (Sidecar Crash, Reconnect, Corrupted Memory, Disk Full)
+- [x] 40. Error Recovery (Sidecar Crash, Reconnect, Corrupted Memory, Disk Full)
 
   **What to do**:
   - Sidecar crash recovery:

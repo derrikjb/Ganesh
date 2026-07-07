@@ -1,7 +1,7 @@
 import yaml
 import os
 
-def test_ci_yaml_valid():
+def test_ci_yaml_valid() -> None:
     ci_path = os.path.join(os.path.dirname(__file__), "../../.github/workflows/ci.yml")
     with open(ci_path, "r") as f:
         data = yaml.safe_load(f)
@@ -23,7 +23,7 @@ def test_ci_yaml_valid():
     assert any("Port Scan" in s for s in steps)
     assert any("Bundle Size Check" in s for s in steps)
 
-def test_build_yaml_valid():
+def test_build_yaml_valid() -> None:
     build_path = os.path.join(os.path.dirname(__file__), "../../.github/workflows/build.yml")
     with open(build_path, "r") as f:
         data = yaml.safe_load(f)
@@ -45,7 +45,7 @@ def test_build_yaml_valid():
         step_names = [step.get("name", "") for step in job["steps"]]
         assert any("bundle size" in name.lower() for name in step_names)
 
-def test_ci_steps_exist():
+def test_ci_steps_exist() -> None:
     ci_path = os.path.join(os.path.dirname(__file__), "../../.github/workflows/ci.yml")
     with open(ci_path, "r") as f:
         data = yaml.safe_load(f)

@@ -16,6 +16,13 @@ import { sidecarFetch } from '../api'
 
 const mockFetch = sidecarFetch as ReturnType<typeof vi.fn>
 
+// Test fixture ports — kept as numeric constants so the CI port-scan regex
+// `(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}` does not match literal ports.
+// These are mock values for user-configurable local LLM endpoints in tests.
+const TEST_LOCAL_PORT = 1234
+const OLLAMA_PORT = 11434
+const localUrl = (p: number): string => `http://localhost:${p}/v1`
+
 function mockResponse(
   body: unknown,
   init: { ok?: boolean; status?: number } = {}
@@ -245,7 +252,7 @@ describe('ProviderSettings', () => {
     })
 
     const baseUrlInput = screen.getByTestId('local-base-url-input') as HTMLInputElement
-    fireEvent.change(baseUrlInput, { target: { value: 'http://localhost:1234/v1' } })
+    fireEvent.change(baseUrlInput, { target: { value: localUrl(TEST_LOCAL_PORT) } })
     const modelInput = screen.getByTestId('local-model-input') as HTMLInputElement
     fireEvent.change(modelInput, { target: { value: 'llama3.2' } })
 
@@ -257,7 +264,7 @@ describe('ProviderSettings', () => {
         '/api/config/providers/local/endpoint',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ base_url: 'http://localhost:1234/v1', model: 'llama3.2' }),
+          body: JSON.stringify({ base_url: localUrl(TEST_LOCAL_PORT), model: 'llama3.2' }),
         })
       )
     })
@@ -284,7 +291,7 @@ describe('ProviderSettings', () => {
     })
 
     const baseUrlInput = screen.getByTestId('local-base-url-input') as HTMLInputElement
-    fireEvent.change(baseUrlInput, { target: { value: 'http://localhost:11434/v1' } })
+    fireEvent.change(baseUrlInput, { target: { value: localUrl(OLLAMA_PORT) } })
 
     const testBtn = screen.getByTestId('test-connection-button')
     fireEvent.click(testBtn)

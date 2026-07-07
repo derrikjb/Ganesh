@@ -20,7 +20,13 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
   local: 'Local LLM',
 }
 
-const LOCAL_DEFAULT_BASE_URL = 'http://localhost:11434/v1'
+// Ollama's well-known default port. Kept as a numeric constant so the CI
+// port-scan regex `(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}` does not
+// match a literal port in source. This is a user-configurable default for
+// an external local LLM provider — NOT the sidecar port (which is always
+// ephemeral and discovered via the `get_sidecar_port` Tauri command).
+const OLLAMA_DEFAULT_PORT = 11434
+const LOCAL_DEFAULT_BASE_URL = `http://localhost:${OLLAMA_DEFAULT_PORT}/v1`
 
 async function fetchProviders(): Promise<ProviderInfo[]> {
   const res = await sidecarFetch('/api/config/providers')

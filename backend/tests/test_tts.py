@@ -19,8 +19,8 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 os.chdir(BACKEND_DIR)
 
-import main as main_module
-from ganesh_backend.services.tts import TTSService, reset_tts_service
+import main as main_module  # noqa: E402
+from ganesh_backend.services.tts import TTSService, reset_tts_service  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

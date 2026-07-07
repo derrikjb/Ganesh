@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
 import uuid
 from pathlib import Path
 
@@ -19,8 +18,8 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 os.chdir(BACKEND_DIR)
 
-from ganesh_backend.embeddings import HashEmbedder
-from ganesh_backend.services.conversations import ConversationStore
+from ganesh_backend.embeddings import HashEmbedder  # noqa: E402
+from ganesh_backend.services.conversations import ConversationStore  # noqa: E402
 
 
 @pytest.fixture

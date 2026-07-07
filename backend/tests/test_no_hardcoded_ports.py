@@ -2,7 +2,7 @@ import re
 import os
 from pathlib import Path
 
-def test_no_hardcoded_ports_in_frontend():
+def test_no_hardcoded_ports_in_frontend() -> None:
     """Verify no hardcoded ports (localhost:1234, etc.) in frontend source files."""
     frontend_src = Path(__file__).parent.parent.parent / "frontend" / "src"
     # Regex: (localhost|127.0.0.1|0.0.0.0):\d{2,5}

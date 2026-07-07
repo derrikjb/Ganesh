@@ -83,7 +83,7 @@ async def disk_space() -> dict[str, object]:
 
 
 @router.get("/disk-space/{name}", response_model=DiskSpaceResponse)
-async def disk_space(name: str) -> DiskSpaceResponse:
+async def disk_space_for_model(name: str) -> DiskSpaceResponse:
     if name not in REQUIRED_MODELS:
         raise HTTPException(status_code=404, detail=f"Unknown model: {name}")
     mgr = _manager()

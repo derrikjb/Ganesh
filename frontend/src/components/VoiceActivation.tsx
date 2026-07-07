@@ -113,7 +113,7 @@ export function VoiceActivation({ onTranscription }: VoiceActivationProps = {}) 
         setMicStatus('idle')
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [stopStream],
   )
 

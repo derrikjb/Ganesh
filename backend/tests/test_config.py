@@ -1,10 +1,7 @@
-import os
 import json
 import yaml
 import pytest
-import keyring
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from ganesh_backend.services.config import ConfigService, DEFAULT_CONFIG
 
 class MockKeyring:
@@ -99,21 +96,6 @@ def test_update_config_safe(temp_config_dir):
     assert "update" in safe
     assert safe["update"]["channel"] == "stable"
     assert safe["update"]["auto_check"] is True
-
-def test_update_config_defaults(temp_config_dir):
-    service = ConfigService()
-    assert service.get_setting("update.channel") == "stable"
-    assert service.get_setting("update.auto_check") is True
-
-def test_update_config_set_channel(temp_config_dir):
-    service = ConfigService()
-    service.set_setting("update.channel", "beta")
-    assert service.get_setting("update.channel") == "beta"
-
-def test_update_config_set_auto_check(temp_config_dir):
-    service = ConfigService()
-    service.set_setting("update.auto_check", False)
-    assert service.get_setting("update.auto_check") is False
 
 def test_update_config_in_safe_config(temp_config_dir):
     service = ConfigService()

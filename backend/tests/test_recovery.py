@@ -30,7 +30,6 @@ import main as main_module  # noqa: E402
 from ganesh_backend.embeddings import HashEmbedder  # noqa: E402
 from ganesh_backend.services import llm as llm_service  # noqa: E402
 from ganesh_backend.services.memory import (  # noqa: E402
-    BACKUP_FILENAME,
     SCHEMA_VERSION,
     MemoryService,
 )

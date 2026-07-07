@@ -11,3 +11,11 @@
 ## Git Master Issues
 - Encountered issues with `.gitignore` preventing `git add` of the plan file. Fixed by correcting the ignore patterns.
 - Found untracked evidence files in `frontend/.sisyphus/`. Fixed by updating `.gitignore` to ignore `.sisyphus` directories globally except for plans and notepads.
+
+## Task 41 Resume (2026-07-07)
+- Notepad files restored from eba7925 and current runbook info re-appended.
+- Uncommitted changes from aborted Task 41 attempt need cleanup and commit.
+
+## Task 41 Resume (2026-07-07)
+- Notepad files restored from eba7925 and current runbook info re-appended.
+- Uncommitted changes from aborted Task 41 attempt need cleanup and commit.

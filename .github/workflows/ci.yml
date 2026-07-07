@@ -43,7 +43,7 @@ jobs:
           cd backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pyyaml
+          pip install pytest pyyaml ruff mypy types-PyYAML
 
       - name: Install Frontend Deps
         run: |
@@ -53,13 +53,11 @@ jobs:
       - name: Lint Python (ruff)
         run: |
           cd backend
-          python -m pip install ruff
           ruff check .
 
       - name: Type Check Python (mypy)
         run: |
           cd backend
-          python -m pip install mypy
           mypy .
 
       - name: Lint TypeScript (eslint)
@@ -73,17 +71,11 @@ jobs:
           npx tsc --noEmit
 
       - name: Port Scan
-        shell: bash
         run: |
-          # Fail if any hardcoded ports found in frontend/src
-          # Regex: (localhost|127.0.0.1|0.0.0.0):\d{2,5}
-          if grep -rE "(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}" frontend/src --include="*.ts" --include="*.tsx"; then
-            echo "ERROR: Hardcoded ports found in frontend/src"
-            exit 1
-          fi
+          cd backend
+          pytest tests/test_no_hardcoded_ports.py
 
       - name: Run Pytest
-
         run: |
           cd backend
           pytest
@@ -123,17 +115,6 @@ jobs:
           pip install pyinstaller
           pyinstaller --onefile main.py --name ganesh-backend
           ./dist/ganesh-backend --check-imports
-
-      - name: Bundle Size Check
-        shell: bash
-        run: |
-          # Check sidecar binary size
-          # Thresholds: warn 150MB, fail 250MB
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            python scripts/check_bundle_size.py --artifact sidecar --path backend/dist/ganesh-backend.exe
-          else
-            python scripts/check_bundle_size.py --artifact sidecar --path backend/dist/ganesh-backend
-          fi
 
       - name: Bundle Size Check
         run: |

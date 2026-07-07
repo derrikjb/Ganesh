@@ -9,7 +9,6 @@ LiteLLM and httpx are mocked throughout — no real HTTP calls are made.
 """
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 

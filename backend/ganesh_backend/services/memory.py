@@ -17,9 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ganesh_backend.embeddings import (
-    DEFAULT_EMBEDDING_DIM,
     EmbedderProtocol,
-    HashEmbedder,
     create_default_embedder,
 )
 from ganesh_backend.vector_store import LanceDbVectorStore

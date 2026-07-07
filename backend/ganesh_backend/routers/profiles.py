@@ -28,7 +28,6 @@ from ganesh_backend.services.profiles import (
     ProfileManager,
     get_profile_manager,
     reset_profile_manager,
-    set_profile_manager,
 )
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
