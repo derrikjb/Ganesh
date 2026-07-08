@@ -12,6 +12,7 @@ import { AccessibilitySettings } from './components/AccessibilitySettings'
 import { ProviderSettings } from './components/ProviderSettings'
 import { UpdateNotification } from './components/UpdateNotification'
 import { UpdateSettings } from './components/UpdateSettings'
+import { VoiceSettings } from './components/VoiceSettings'
 import type { ConversationDetail } from './types/conversations'
 
 function AppContent() {
@@ -21,6 +22,7 @@ function AppContent() {
   const [showA11yPanel, setShowA11yPanel] = useState(false)
   const [showUpdatePanel, setShowUpdatePanel] = useState(false)
   const [showProviderPanel, setShowProviderPanel] = useState(false)
+  const [showVoicePanel, setShowVoicePanel] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
 
@@ -66,6 +68,19 @@ function AppContent() {
               <path d="M19 7c-3 2-7 2-10 0" />
               <path d="M12 6v6" />
               <path d="M9 22l3-10 3 10" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setShowVoicePanel((v) => !v)}
+            className="p-2 rounded-md hover:bg-bg-secondary transition-colors text-text-muted hover:text-text-primary"
+            data-testid="voice-toggle-button"
+            aria-label="Toggle voice settings"
+            aria-expanded={showVoicePanel}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="22" />
             </svg>
           </button>
           <button
@@ -147,6 +162,12 @@ function AppContent() {
         {showProviderPanel && (
           <aside className="w-80 border-l border-border bg-bg-secondary p-4 overflow-y-auto">
             <ProviderSettings onClose={() => setShowProviderPanel(false)} />
+          </aside>
+        )}
+
+        {showVoicePanel && (
+          <aside className="w-80 border-l border-border bg-bg-secondary p-4 overflow-y-auto">
+            <VoiceSettings onClose={() => setShowVoicePanel(false)} />
           </aside>
         )}
       </div>
