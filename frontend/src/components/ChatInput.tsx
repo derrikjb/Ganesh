@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { sidecarFetch } from '../api'
 import { useAccessibility } from '../contexts/AccessibilityContext'
 import { useVoiceRecording } from '../hooks/useVoiceRecording'
 import type { AttachedFile } from '../types/chat'
+
+type ActivationMode = 'click_to_talk' | 'push_to_talk' | 'vad'
 
 interface ChatInputProps {
   onSend: (text: string, files?: AttachedFile[]) => void
@@ -16,10 +19,29 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [justSent, setJustSent] = useState(false)
+  const [activationMode, setActivationMode] = useState<ActivationMode>('click_to_talk')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { isRecording, isTranscribing, transcript, error, start, stop } =
     useVoiceRecording()
+
+  useEffect(() => {
+    sidecarFetch('/api/voice/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.activation_mode) setActivationMode(data.activation_mode)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const mode = (e as CustomEvent<ActivationMode>).detail
+      if (mode) setActivationMode(mode)
+    }
+    window.addEventListener('ganesh:activation-mode-changed', handler)
+    return () => window.removeEventListener('ganesh:activation-mode-changed', handler)
+  }, [])
 
   useEffect(() => {
     if (transcript) {
@@ -183,27 +205,65 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         {!textOnlyMode && (
           <button
             type="button"
-            onClick={() => {
-              if (isTranscribing) return
-              if (isRecording) {
-                void stop()
-              } else {
-                void start()
-              }
-            }}
+            onClick={
+              activationMode === 'push_to_talk'
+                ? undefined
+                : () => {
+                    if (isTranscribing) return
+                    if (isRecording) {
+                      void stop()
+                    } else {
+                      void start()
+                    }
+                  }
+            }
+            onPointerDown={
+              activationMode === 'push_to_talk'
+                ? () => {
+                    if (isTranscribing || isRecording) return
+                    void start()
+                  }
+                : undefined
+            }
+            onPointerUp={
+              activationMode === 'push_to_talk'
+                ? () => {
+                    if (isRecording) void stop()
+                  }
+                : undefined
+            }
+            onPointerLeave={
+              activationMode === 'push_to_talk'
+                ? () => {
+                    if (isRecording) void stop()
+                  }
+                : undefined
+            }
             disabled={disabled || isTranscribing}
             className={`p-1 transition-colors disabled:opacity-50 ${
               isRecording
                 ? 'text-status-error animate-pulse'
                 : 'text-text-muted hover:text-accent'
             }`}
-            aria-label={isRecording ? 'Stop recording' : 'Voice input'}
+            aria-label={
+              activationMode === 'push_to_talk'
+                ? 'Hold to talk'
+                : activationMode === 'vad'
+                  ? 'Auto-detect voice'
+                  : isRecording
+                    ? 'Stop recording'
+                    : 'Click to talk'
+            }
             title={
               isTranscribing
                 ? 'Transcribing...'
-                : isRecording
-                  ? 'Stop recording'
-                  : 'Voice input'
+                : activationMode === 'push_to_talk'
+                  ? 'Hold to talk'
+                  : activationMode === 'vad'
+                    ? 'Auto-detect voice'
+                    : isRecording
+                      ? 'Stop recording'
+                      : 'Click to talk'
             }
             data-testid="mic-button"
           >

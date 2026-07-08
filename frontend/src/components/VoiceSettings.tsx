@@ -23,6 +23,7 @@ interface VoiceSettingsResponse {
   tts_local_available: boolean
   tts_cloud_available: boolean
   cuda_available: boolean
+  activation_mode: 'click_to_talk' | 'push_to_talk' | 'vad'
 }
 
 interface VoiceSettingsProps {
@@ -85,6 +86,7 @@ async function saveApiKey(provider: string, apiKey: string): Promise<void> {
 
 export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [settings, setSettings] = useState<VoiceSettingsResponse | null>(null)
+  const [activationMode, setActivationMode] = useState<'click_to_talk' | 'push_to_talk' | 'vad'>('click_to_talk')
   const [sttEngine, setSttEngine] = useState<'local' | 'cloud'>('local')
   const [ttsEngine, setTtsEngine] = useState<'local' | 'cloud'>('local')
   const [whisperModel, setWhisperModel] = useState('tiny')
@@ -113,6 +115,8 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
       setTtsDevice(data.tts_device)
       setDeepgramModel(data.deepgram_model)
       setElevenlabsVoiceId(data.elevenlabs_voice_id)
+      setActivationMode(data.activation_mode)
+      setActivationMode(data.activation_mode)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -256,6 +260,18 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
     }
   }
 
+  const handleActivationModeChange = async (mode: 'click_to_talk' | 'push_to_talk' | 'vad') => {
+    setActivationMode(mode)
+    setError(null)
+    try {
+      const updated = await saveVoiceSettings({ activation_mode: mode })
+      setSettings(updated)
+      window.dispatchEvent(new CustomEvent('ganesh:activation-mode-changed', { detail: mode }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   const piperVoices = settings?.piper_voices ?? []
   const activeVoiceId = settings?.piper_active_voice ?? null
 
@@ -279,6 +295,26 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
       </div>
 
       <div className="space-y-6">
+        {/* Activation Mode Section */}
+        <div>
+          <h3 className="mb-2 text-sm font-medium text-text-primary">Voice Input Mode</h3>
+          <select
+            value={activationMode}
+            onChange={(e) => handleActivationModeChange(e.target.value as 'click_to_talk' | 'push_to_talk' | 'vad')}
+            className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+            data-testid="activation-mode-select"
+          >
+            <option value="click_to_talk">Click to Talk</option>
+            <option value="push_to_talk">Push to Talk</option>
+            <option value="vad">Voice Activity Detection</option>
+          </select>
+          <p className="mt-1 text-xs text-text-muted">
+            {activationMode === 'click_to_talk' && 'Click the mic button to start/stop recording.'}
+            {activationMode === 'push_to_talk' && 'Hold the mic button to record, release to stop.'}
+            {activationMode === 'vad' && 'Automatically starts recording when you speak.'}
+          </p>
+        </div>
+
         {/* STT Section */}
         <div>
           <h3 className="mb-2 text-sm font-medium text-text-primary">Speech-to-Text</h3>
