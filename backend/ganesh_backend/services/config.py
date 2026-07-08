@@ -7,12 +7,18 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 SUPPORTED_PROVIDERS = ("openai", "anthropic", "google", "openrouter", "local")
+SUPPORTED_VOICE_PROVIDERS = ("deepgram", "elevenlabs")
 
 _PROVIDER_ENV_VAR = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GEMINI_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
+}
+
+_VOICE_PROVIDER_ENV_VAR = {
+    "deepgram": "DEEPGRAM_API_KEY",
+    "elevenlabs": "ELEVENLABS_API_KEY",
 }
 
 DEFAULT_CONFIG = {
@@ -28,6 +34,13 @@ DEFAULT_CONFIG = {
     "voice": {
         "stt_enabled": False,
         "tts_enabled": False,
+        "stt_engine": "local",        # "local" | "cloud"
+        "tts_engine": "local",        # "local" | "cloud"
+        "whisper_model": "tiny",      # "tiny" | "base" | "small" | "medium" | "large"
+        "deepgram_model": "nova-2",   # Deepgram model name
+        "piper_voices": [],           # list of {"id": str, "name": str, "path": str}
+        "piper_active_voice": None,   # voice id string or None
+        "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM",
     },
     "personality": {
         "traits": {
@@ -141,6 +154,34 @@ class ConfigService:
             base_url = self.get_setting("llm.local.base_url")
             return bool(base_url)
         return bool(self.get_provider_key(provider) or self.get_provider_key_env(provider))
+
+    def get_voice_provider_key(self, provider: str) -> Optional[str]:
+        """Read a voice provider's API key from the keyring (no env fallback)."""
+        if provider not in SUPPORTED_VOICE_PROVIDERS:
+            return None
+        return keyring.get_password(KEYRING_SERVICE, f"ganesh_voice_key_{provider}")
+
+    def get_voice_provider_key_env(self, provider: str) -> Optional[str]:
+        """Read a voice provider's API key from the environment variable fallback."""
+        env_var = _VOICE_PROVIDER_ENV_VAR.get(provider)
+        if not env_var:
+            return None
+        return os.environ.get(env_var)
+
+    def set_voice_provider_key(self, provider: str, api_key: str) -> None:
+        """Store a voice provider's API key in the keyring."""
+        if provider not in SUPPORTED_VOICE_PROVIDERS:
+            raise ValueError(f"Unknown voice provider: {provider!r}")
+        keyring.set_password(KEYRING_SERVICE, f"ganesh_voice_key_{provider}", api_key)
+
+    def is_voice_provider_configured(self, provider: str) -> bool:
+        """True if a voice provider has a key in keyring or env."""
+        if provider not in SUPPORTED_VOICE_PROVIDERS:
+            return False
+        return bool(
+            self.get_voice_provider_key(provider)
+            or self.get_voice_provider_key_env(provider)
+        )
 
     def is_keyring_available(self) -> bool:
         try:
