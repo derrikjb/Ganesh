@@ -242,7 +242,7 @@ async def get_voice_settings() -> Any:
 
 @router.put("/settings", response_model=VoiceSettingsResponse)
 async def update_voice_settings(req: VoiceSettingsUpdate) -> Any:
-    updates = req.dict(exclude_none=True)
+    updates = req.model_dump(exclude_none=True)
     old_whisper = config_service.get_setting("voice.whisper_model", "tiny")
     old_device = config_service.get_setting("voice.stt_device", "auto")
     for key, value in updates.items():
