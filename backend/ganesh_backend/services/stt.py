@@ -91,6 +91,39 @@ def is_model_loaded() -> bool:
     return _model_cache is not None
 
 
+def _resolve_device() -> tuple[str, str]:
+    """Resolve the CTranslate2 device and compute type from config.
+
+    Returns (device, compute_type). When ``voice.stt_device`` is ``"auto"``,
+    CUDA is used if available with float16; otherwise CPU with int8.
+    ``"cpu"`` forces int8 on CPU. ``"cuda"`` forces float16 on GPU and
+    raises if no CUDA device is present.
+    """
+    preference = config_service.get_setting("voice.stt_device", "auto")
+    if preference == "cpu":
+        return "cpu", "int8"
+    if preference == "cuda":
+        if _cuda_device_count() == 0:
+            raise STTError("stt_device is 'cuda' but no CUDA device was found")
+        return "cuda", "float16"
+    # auto: use CUDA if available, else CPU
+    if _cuda_device_count() > 0:
+        return "cuda", "float16"
+    return "cpu", "int8"
+
+
+def _cuda_device_count() -> int:
+    try:
+        import ctranslate2
+        return ctranslate2.get_cuda_device_count()
+    except Exception:
+        return 0
+
+
+def is_cuda_available() -> bool:
+    return _cuda_device_count() > 0
+
+
 def _load_local_model(model_name: str = DEFAULT_MODEL) -> Any:
     """Load (or return cached) faster-whisper model.
 
@@ -109,14 +142,13 @@ def _load_local_model(model_name: str = DEFAULT_MODEL) -> Any:
             "faster-whisper is not installed; local STT unavailable"
         ) from exc
 
+    device, compute_type = _resolve_device()
+
     try:
-        # CPU-only, int8 quantisation for the tiny/base models keeps the
-        # binary small and inference fast on commodity hardware.
-        _model_cache = WhisperModel(model_name, device="cpu", compute_type="int8")
+        _model_cache = WhisperModel(model_name, device=device, compute_type=compute_type)
     except Exception as exc:  # noqa: BLE001 - many failure modes from CT2
-        # Clear any half-initialised cache so a retry starts fresh.
         _model_cache = None
-        raise STTError(f"failed to load Whisper model '{model_name}': {exc}") from exc
+        raise STTError(f"failed to load Whisper model '{model_name}' on {device}: {exc}") from exc
 
     return _model_cache
 

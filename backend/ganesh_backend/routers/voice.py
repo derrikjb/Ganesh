@@ -175,6 +175,7 @@ class VoiceSettingsResponse(BaseModel):
     stt_engine: str
     tts_engine: str
     whisper_model: str
+    stt_device: str
     deepgram_model: str
     elevenlabs_voice_id: str
     piper_voices: list[dict[str, Any]]
@@ -183,12 +184,14 @@ class VoiceSettingsResponse(BaseModel):
     stt_cloud_available: bool
     tts_local_available: bool
     tts_cloud_available: bool
+    cuda_available: bool
 
 
 class VoiceSettingsUpdate(BaseModel):
     stt_engine: Optional[str] = None
     tts_engine: Optional[str] = None
     whisper_model: Optional[str] = None
+    stt_device: Optional[str] = None
     deepgram_model: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
     piper_active_voice: Optional[str] = None
@@ -214,6 +217,7 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         stt_engine=config_service.get_setting("voice.stt_engine", "local"),
         tts_engine=config_service.get_setting("voice.tts_engine", "local"),
         whisper_model=config_service.get_setting("voice.whisper_model", "tiny"),
+        stt_device=config_service.get_setting("voice.stt_device", "auto"),
         deepgram_model=config_service.get_setting("voice.deepgram_model", "nova-2"),
         elevenlabs_voice_id=config_service.get_setting(
             "voice.elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM"
@@ -224,6 +228,7 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         stt_cloud_available=cloud_available,
         tts_local_available=service._local_available(),
         tts_cloud_available=service._cloud_available(),
+        cuda_available=stt_service.is_cuda_available(),
     )
 
 
@@ -236,9 +241,12 @@ async def get_voice_settings() -> Any:
 async def update_voice_settings(req: VoiceSettingsUpdate) -> Any:
     updates = req.dict(exclude_none=True)
     old_whisper = config_service.get_setting("voice.whisper_model", "tiny")
+    old_device = config_service.get_setting("voice.stt_device", "auto")
     for key, value in updates.items():
         config_service.set_setting(f"voice.{key}", value)
     if "whisper_model" in updates and updates["whisper_model"] != old_whisper:
+        stt_service.reset_model_cache()
+    if "stt_device" in updates and updates["stt_device"] != old_device:
         stt_service.reset_model_cache()
     return _build_voice_settings()
 
