@@ -18,7 +18,10 @@ fn resolve_sidecar() -> (String, Vec<String>) {
         .and_then(|p| p.parent().map(PathBuf::from));
     if let Some(dir) = exe_dir {
         let candidate = dir.join("ganesh-backend");
-        if candidate.exists() {
+        // In dev, build.rs creates an empty placeholder and Tauri copies it
+        // next to the exe. An empty file isn't a real sidecar — skip it so
+        // we fall through to the python main.py fallback below.
+        if candidate.exists() && candidate.metadata().map(|m| m.len() > 0).unwrap_or(false) {
             return (candidate.to_string_lossy().into_owned(), Vec::new());
         }
     }
