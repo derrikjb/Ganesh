@@ -121,6 +121,7 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             show_main_window(app);
         }))
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .manage(update_state)

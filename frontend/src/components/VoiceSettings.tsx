@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { open } from '@tauri-apps/plugin-dialog'
 import { sidecarFetch } from '../api'
 
 interface PiperVoice {
@@ -602,17 +603,35 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                       htmlFor="new-voice-path"
                       className="mb-1 block text-xs text-text-secondary"
                     >
-                      Path
+                      Voice File
                     </label>
-                    <input
-                      id="new-voice-path"
-                      type="text"
-                      value={newVoicePath}
-                      onChange={(e) => setNewVoicePath(e.target.value)}
-                      placeholder="/path/to/voice.onnx"
-                      className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
-                      data-testid="new-voice-path-input"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        id="new-voice-path"
+                        type="text"
+                        value={newVoicePath}
+                        onChange={(e) => setNewVoicePath(e.target.value)}
+                        placeholder="Select a .onnx voice file"
+                        readOnly
+                        className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                        data-testid="new-voice-path-input"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const selected = await open({
+                            filters: [{ name: 'Piper Voice', extensions: ['onnx'] }],
+                          })
+                          if (typeof selected === 'string') {
+                            setNewVoicePath(selected)
+                          }
+                        }}
+                        className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
+                        data-testid="browse-voice-button"
+                      >
+                        Browse
+                      </button>
+                    </div>
                   </div>
                   <button
                     type="button"
