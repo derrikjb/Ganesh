@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import os
+import uuid
 import wave
 from typing import Any, Optional
 
@@ -60,6 +61,9 @@ class TTSService:
         self._elevenlabs_voice_id: str = (
             elevenlabs_voice_id
             or os.environ.get("ELEVENLABS_VOICE_ID", "")
+            or config_service.get_setting(
+                "voice.elevenlabs_voice_id", ELEVENLABS_DEFAULT_VOICE_ID
+            )
             or ELEVENLABS_DEFAULT_VOICE_ID
         )
         self._elevenlabs_model: str = (
@@ -67,6 +71,21 @@ class TTSService:
         )
         self._elevenlabs_api_key_override: Optional[str] = elevenlabs_api_key
         self._voice_cache: dict[str, Any] = {}
+
+    def _piper_voices(self) -> list[dict[str, str]]:
+        voices = config_service.get_setting("voice.piper_voices", [])
+        if not isinstance(voices, list):
+            return []
+        return [v for v in voices if isinstance(v, dict)]
+
+    def _active_piper_voice_path(self) -> Optional[str]:
+        active_id = config_service.get_setting("voice.piper_active_voice")
+        if not active_id:
+            return None
+        for v in self._piper_voices():
+            if v.get("id") == active_id:
+                return v.get("path") or None
+        return None
 
     def synthesize(
         self,
@@ -78,17 +97,28 @@ class TTSService:
         Returns ``(audio_bytes, content_type, source)`` where ``source`` is
         ``"local"`` or ``"cloud"``. Raises :class:`TTSError` when both
         backends fail and :class:`ValueError` when ``text`` is empty.
+
+        Engine order is controlled by ``voice.tts_engine`` config:
+        ``"local"`` (default) tries local first; ``"cloud"`` tries cloud first.
         """
         if not text or not text.strip():
             raise ValueError("text must be a non-empty string")
 
-        local_audio = self._try_local(text, voice)
-        if local_audio is not None:
-            return local_audio, _content_type(LOCAL_AUDIO_FORMAT), "local"
-
-        cloud_audio = self._try_cloud(text, voice)
-        if cloud_audio is not None:
-            return cloud_audio, _content_type(CLOUD_AUDIO_FORMAT), "cloud"
+        engine_pref = config_service.get_setting("voice.tts_engine", "local")
+        if engine_pref == "cloud":
+            cloud_audio = self._try_cloud(text, voice)
+            if cloud_audio is not None:
+                return cloud_audio, _content_type(CLOUD_AUDIO_FORMAT), "cloud"
+            local_audio = self._try_local(text, voice)
+            if local_audio is not None:
+                return local_audio, _content_type(LOCAL_AUDIO_FORMAT), "local"
+        else:
+            local_audio = self._try_local(text, voice)
+            if local_audio is not None:
+                return local_audio, _content_type(LOCAL_AUDIO_FORMAT), "local"
+            cloud_audio = self._try_cloud(text, voice)
+            if cloud_audio is not None:
+                return cloud_audio, _content_type(CLOUD_AUDIO_FORMAT), "cloud"
 
         raise TTSError("Both local and cloud TTS failed; no audio produced.")
 
@@ -97,16 +127,18 @@ class TTSService:
         return self._local_available() or self._cloud_available()
 
     def list_voices(self) -> list[dict[str, str]]:
-        """Return available voices (local default + configured cloud voice)."""
+        """Return all configured Piper voices plus the ElevenLabs cloud voice."""
         voices: list[dict[str, str]] = []
-        if self._local_available():
-            voices.append(
-                {
-                    "id": self._piper_voice_path or "piper-default",
-                    "name": "Piper (local)",
-                    "backend": "local",
-                }
-            )
+        for v in self._piper_voices():
+            path = v.get("path") or ""
+            if path and self._piper_importable():
+                voices.append(
+                    {
+                        "id": v.get("id", path),
+                        "name": v.get("name", "Piper voice"),
+                        "backend": "local",
+                    }
+                )
         if self._cloud_available():
             voices.append(
                 {
@@ -117,8 +149,33 @@ class TTSService:
             )
         return voices
 
+    def set_active_voice(self, voice_id: str) -> None:
+        """Set ``voice.piper_active_voice`` in config."""
+        config_service.set_setting("voice.piper_active_voice", voice_id)
+
+    def add_voice(self, name: str, path: str) -> dict[str, str]:
+        """Append a new Piper voice to ``voice.piper_voices`` in config."""
+        voice = {"id": str(uuid.uuid4()), "name": name, "path": path}
+        voices = self._piper_voices()
+        voices.append(voice)
+        config_service.set_setting("voice.piper_voices", voices)
+        return voice
+
+    def remove_voice(self, voice_id: str) -> bool:
+        """Remove a Piper voice by id; clears active if it was active."""
+        voices = self._piper_voices()
+        new_voices = [v for v in voices if v.get("id") != voice_id]
+        removed = len(new_voices) != len(voices)
+        if removed:
+            config_service.set_setting("voice.piper_voices", new_voices)
+            active = config_service.get_setting("voice.piper_active_voice")
+            if active == voice_id:
+                config_service.set_setting("voice.piper_active_voice", None)
+        return removed
+
     def _local_available(self) -> bool:
-        if not self._piper_voice_path:
+        path = self._active_piper_voice_path() or self._piper_voice_path
+        if not path:
             return False
         return self._piper_importable()
 
@@ -130,7 +187,7 @@ class TTSService:
         return True
 
     def _try_local(self, text: str, voice: Optional[str]) -> Optional[bytes]:
-        model_path = voice or self._piper_voice_path
+        model_path = voice or self._active_piper_voice_path() or self._piper_voice_path
         if not model_path or not self._piper_importable():
             return None
         try:
@@ -171,12 +228,17 @@ class TTSService:
     def _resolve_elevenlabs_api_key(self) -> Optional[str]:
         if self._elevenlabs_api_key_override is not None:
             return self._elevenlabs_api_key_override
-        try:
-            import keyring
+        key = config_service.get_voice_provider_key("elevenlabs")
+        if not key:
+            key = config_service.get_voice_provider_key_env("elevenlabs")
+        if not key:
+            # Legacy keyring account fallback for existing installs.
+            try:
+                import keyring
 
-            key = keyring.get_password("ganesh", ELEVENLABS_KEYRING_KEY)
-        except Exception:
-            key = None
+                key = keyring.get_password("ganesh", ELEVENLABS_KEYRING_KEY)
+            except Exception:
+                key = None
         if not key:
             key = os.environ.get("ELEVENLABS_API_KEY")
         return key

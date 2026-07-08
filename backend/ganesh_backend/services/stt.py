@@ -17,7 +17,6 @@ produced the result (``"local"`` or ``"cloud"``).
 from __future__ import annotations
 
 import math
-import os
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Optional
@@ -157,7 +156,7 @@ def _segments_to_text_and_confidence(
 def transcribe_local(
     audio_path: str,
     language: Optional[str] = None,
-    model_name: str = DEFAULT_MODEL,
+    model_name: Optional[str] = None,
 ) -> TranscriptionResult:
     """Transcribe ``audio_path`` with the local faster-whisper engine.
 
@@ -165,11 +164,14 @@ def transcribe_local(
         audio_path: Path to an audio file readable by ffmpeg/av.
         language: ISO-639-1 language hint (e.g. ``"en"``) or None for auto-detect.
         model_name: Whisper model size (``tiny`` / ``base`` / ``small`` / ...).
+            If None, reads from ``voice.whisper_model`` config.
 
     Raises:
         STTUnavailableError: faster-whisper not installed.
         STTError: model load or transcription failed.
     """
+    if model_name is None:
+        model_name = config_service.get_setting("voice.whisper_model", DEFAULT_MODEL)
     model = _load_local_model(model_name)
     try:
         segments, info = model.transcribe(audio_path, language=language)
@@ -190,19 +192,16 @@ def get_deepgram_key() -> str:
     """Resolve the Deepgram API key.
 
     Order of precedence:
-        1. OS keyring (``ganesh`` service, ``deepgram_api_key`` account)
+        1. OS keyring via ``config_service.get_voice_provider_key("deepgram")``
+           (account ``ganesh_voice_key_deepgram``)
         2. ``DEEPGRAM_API_KEY`` environment variable
 
     Cached for the process lifetime; call :func:`reset_deepgram_key_cache`
     to force a re-read.
     """
-    key: Optional[str] = None
-    try:
-        key = config_service.get_setting("voice.deepgram_api_key")
-    except Exception:  # noqa: BLE001 - config may not be initialised
-        key = None
+    key: Optional[str] = config_service.get_voice_provider_key("deepgram")
     if not key:
-        key = os.environ.get("DEEPGRAM_API_KEY")
+        key = config_service.get_voice_provider_key_env("deepgram")
     if not key:
         raise MissingDeepgramKeyError(
             "No Deepgram API key configured. Set one via the config UI or "
@@ -359,10 +358,9 @@ def transcribe(
 ) -> TranscriptionResult:
     """Transcribe ``audio_path`` using local engine with cloud fallback.
 
-    Strategy:
-        1. Try :func:`transcribe_local`. On any failure, proceed to step 2.
-        2. Try :func:`transcribe_cloud`. If that also fails, raise
-           :class:`STTError` describing both failures.
+    Engine order is controlled by ``voice.stt_engine`` config:
+        - ``"local"`` (default): try local first, fall back to cloud.
+        - ``"cloud"``: try cloud first, fall back to local.
 
     Args:
         audio_path: Path to an audio file.
@@ -373,6 +371,18 @@ def transcribe(
     Raises:
         STTError: Both engines failed.
     """
+    engine_pref = config_service.get_setting("voice.stt_engine", "local")
+    if engine_pref == "cloud":
+        return _transcribe_cloud_first(audio_path, language, cloud_client=cloud_client)
+    return _transcribe_local_first(audio_path, language, cloud_client=cloud_client)
+
+
+def _transcribe_local_first(
+    audio_path: str,
+    language: Optional[str],
+    *,
+    cloud_client: Optional[httpx.AsyncClient],
+) -> TranscriptionResult:
     local_error: Optional[Exception] = None
     try:
         return transcribe_local(audio_path, language=language)
@@ -388,6 +398,27 @@ def transcribe(
         ) from cloud_exc
 
 
+def _transcribe_cloud_first(
+    audio_path: str,
+    language: Optional[str],
+    *,
+    cloud_client: Optional[httpx.AsyncClient],
+) -> TranscriptionResult:
+    cloud_error: Optional[Exception] = None
+    try:
+        return transcribe_cloud(audio_path, language=language, client=cloud_client)
+    except Exception as exc:  # noqa: BLE001 - any cloud failure -> fallback
+        cloud_error = exc
+
+    try:
+        return transcribe_local(audio_path, language=language)
+    except STTError as local_exc:
+        raise STTError(
+            f"cloud STT failed ({cloud_error}); local fallback also failed "
+            f"({local_exc})"
+        ) from local_exc
+
+
 async def transcribe_async(
     audio_path: str,
     language: Optional[str] = None,
@@ -396,8 +427,26 @@ async def transcribe_async(
 ) -> TranscriptionResult:
     """Async orchestrator variant — uses :func:`transcribe_cloud_async`.
 
-    Preferred inside FastAPI route handlers (no nested event loop).
+    Engine order is controlled by ``voice.stt_engine`` config (same as
+    :func:`transcribe`). Preferred inside FastAPI route handlers (no nested
+    event loop).
     """
+    engine_pref = config_service.get_setting("voice.stt_engine", "local")
+    if engine_pref == "cloud":
+        return await _transcribe_cloud_first_async(
+            audio_path, language, cloud_client=cloud_client
+        )
+    return await _transcribe_local_first_async(
+        audio_path, language, cloud_client=cloud_client
+    )
+
+
+async def _transcribe_local_first_async(
+    audio_path: str,
+    language: Optional[str],
+    *,
+    cloud_client: Optional[httpx.AsyncClient],
+) -> TranscriptionResult:
     local_error: Optional[Exception] = None
     try:
         return transcribe_local(audio_path, language=language)
@@ -413,3 +462,26 @@ async def transcribe_async(
             f"local STT failed ({local_error}); cloud fallback also failed "
             f"({cloud_exc})"
         ) from cloud_exc
+
+
+async def _transcribe_cloud_first_async(
+    audio_path: str,
+    language: Optional[str],
+    *,
+    cloud_client: Optional[httpx.AsyncClient],
+) -> TranscriptionResult:
+    cloud_error: Optional[Exception] = None
+    try:
+        return await transcribe_cloud_async(
+            audio_path, language=language, client=cloud_client
+        )
+    except Exception as exc:  # noqa: BLE001
+        cloud_error = exc
+
+    try:
+        return transcribe_local(audio_path, language=language)
+    except STTError as local_exc:
+        raise STTError(
+            f"cloud STT failed ({cloud_error}); local fallback also failed "
+            f"({local_exc})"
+        ) from local_exc

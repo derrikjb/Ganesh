@@ -17,6 +17,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from ganesh_backend.services import stt as stt_service
+from ganesh_backend.services.config import config_service, SUPPORTED_VOICE_PROVIDERS
 from ganesh_backend.services.tts import TTSError, get_tts_service
 from ganesh_backend.services.voice_activation import (
     ActivationMode,
@@ -163,6 +164,132 @@ async def voices() -> Any:
     return VoicesResponse(
         voices=[VoiceInfo(**v) for v in service.list_voices()]
     )
+
+
+# ---------------------------------------------------------------------------
+# Voice settings: STT/TTS engine selection, whisper model, piper voice mgmt
+# ---------------------------------------------------------------------------
+
+
+class VoiceSettingsResponse(BaseModel):
+    stt_engine: str
+    tts_engine: str
+    whisper_model: str
+    deepgram_model: str
+    elevenlabs_voice_id: str
+    piper_voices: list[dict[str, Any]]
+    piper_active_voice: Optional[str]
+    stt_local_available: bool
+    stt_cloud_available: bool
+    tts_local_available: bool
+    tts_cloud_available: bool
+
+
+class VoiceSettingsUpdate(BaseModel):
+    stt_engine: Optional[str] = None
+    tts_engine: Optional[str] = None
+    whisper_model: Optional[str] = None
+    deepgram_model: Optional[str] = None
+    elevenlabs_voice_id: Optional[str] = None
+    piper_active_voice: Optional[str] = None
+
+
+class AddPiperVoiceRequest(BaseModel):
+    name: str
+    path: str
+
+
+class VoiceKeyUpdate(BaseModel):
+    api_key: str
+
+
+def _build_voice_settings() -> VoiceSettingsResponse:
+    service = get_tts_service()
+    cloud_available = True
+    try:
+        stt_service.get_deepgram_key()
+    except stt_service.STTError:
+        cloud_available = False
+    return VoiceSettingsResponse(
+        stt_engine=config_service.get_setting("voice.stt_engine", "local"),
+        tts_engine=config_service.get_setting("voice.tts_engine", "local"),
+        whisper_model=config_service.get_setting("voice.whisper_model", "tiny"),
+        deepgram_model=config_service.get_setting("voice.deepgram_model", "nova-2"),
+        elevenlabs_voice_id=config_service.get_setting(
+            "voice.elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM"
+        ),
+        piper_voices=config_service.get_setting("voice.piper_voices", []),
+        piper_active_voice=config_service.get_setting("voice.piper_active_voice"),
+        stt_local_available=stt_service.is_local_available(),
+        stt_cloud_available=cloud_available,
+        tts_local_available=service._local_available(),
+        tts_cloud_available=service._cloud_available(),
+    )
+
+
+@router.get("/settings", response_model=VoiceSettingsResponse)
+async def get_voice_settings() -> Any:
+    return _build_voice_settings()
+
+
+@router.put("/settings", response_model=VoiceSettingsResponse)
+async def update_voice_settings(req: VoiceSettingsUpdate) -> Any:
+    updates = req.dict(exclude_none=True)
+    old_whisper = config_service.get_setting("voice.whisper_model", "tiny")
+    for key, value in updates.items():
+        config_service.set_setting(f"voice.{key}", value)
+    if "whisper_model" in updates and updates["whisper_model"] != old_whisper:
+        stt_service.reset_model_cache()
+    return _build_voice_settings()
+
+
+@router.post("/piper-voices")
+async def add_piper_voice(req: AddPiperVoiceRequest) -> dict[str, Any]:
+    service = get_tts_service()
+    voice = service.add_voice(req.name, req.path)
+    return voice
+
+
+@router.delete("/piper-voices/{voice_id}", status_code=204)
+async def delete_piper_voice(voice_id: str) -> Response:
+    service = get_tts_service()
+    service.remove_voice(voice_id)
+    return Response(status_code=204)
+
+
+@router.post("/piper-voices/{voice_id}/activate", response_model=VoiceSettingsResponse)
+async def activate_piper_voice(voice_id: str) -> Any:
+    service = get_tts_service()
+    service.set_active_voice(voice_id)
+    return _build_voice_settings()
+
+
+@router.post("/keys/{provider}")
+async def store_voice_provider_key(
+    provider: str, update: VoiceKeyUpdate
+) -> dict[str, str]:
+    if provider not in SUPPORTED_VOICE_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown voice provider: {provider!r}",
+        )
+    try:
+        config_service.set_voice_provider_key(provider, update.api_key)
+        if provider == "deepgram":
+            stt_service.reset_deepgram_key_cache()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok"}
+
+
+@router.get("/keys/{provider}/status")
+async def voice_provider_key_status(provider: str) -> dict[str, bool]:
+    if provider not in SUPPORTED_VOICE_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown voice provider: {provider!r}",
+        )
+    return {"configured": config_service.is_voice_provider_configured(provider)}
 
 
 # ---------------------------------------------------------------------------
