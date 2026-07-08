@@ -398,6 +398,101 @@ async def reset_voice_state() -> Any:
     return VoiceStateResponse(state=service.get_state(), mode=service.mode)
 
 
+# ---------------------------------------------------------------------------
+# Server-side recording: bypasses webview mic permission issues
+# ---------------------------------------------------------------------------
+
+_recording_proc: Optional[Any] = None
+_recording_path: Optional[str] = None
+
+
+@router.post("/record/start")
+async def start_recording() -> Any:
+    global _recording_proc, _recording_path
+
+    if _recording_proc is not None and _recording_proc.poll() is None:
+        raise HTTPException(status_code=409, detail="Recording already in progress")
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    _recording_path = tmp.name
+    tmp.close()
+
+    import subprocess
+    import shutil
+    import sys
+
+    try:
+        if shutil.which("parecord"):
+            _recording_proc = subprocess.Popen(
+                ["parecord", "--format=s16le", "--rate=44100", "--channels=1", "--file-format=wav", _recording_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+        elif shutil.which("arecord"):
+            _recording_proc = subprocess.Popen(
+                ["arecord", "-f", "cd", "-t", "wav", "-q", _recording_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+        else:
+            os.unlink(_recording_path)
+            _recording_path = None
+            raise HTTPException(
+                status_code=500,
+                detail="No audio recording tool found. Install alsa-utils or pulseaudio-utils.",
+            )
+    except Exception as exc:
+        if _recording_path and os.path.exists(_recording_path):
+            os.unlink(_recording_path)
+        _recording_path = None
+        _recording_proc = None
+        raise HTTPException(status_code=500, detail=f"Failed to start recording: {exc}") from exc
+
+    return {"status": "recording"}
+
+
+@router.post("/record/stop", response_model=TranscriptionResponse)
+async def stop_recording() -> Any:
+    global _recording_proc, _recording_path
+
+    if _recording_proc is None or _recording_proc.poll() is not None:
+        if _recording_path and os.path.exists(_recording_path):
+            os.unlink(_recording_path)
+        _recording_path = None
+        _recording_proc = None
+        raise HTTPException(status_code=409, detail="No recording in progress")
+
+    _recording_proc.terminate()
+    _recording_proc.wait(timeout=5)
+    _recording_proc = None
+
+    path = _recording_path
+    _recording_path = None
+
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=500, detail="Recording file not found")
+
+    try:
+        result = await stt_service.transcribe_async(path)
+    except stt_service.STTError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+    return TranscriptionResponse(
+        text=result.text, confidence=result.confidence, engine=result.engine
+    )
+
+
+@router.get("/record/status")
+async def recording_status() -> Any:
+    is_recording = _recording_proc is not None and _recording_proc.poll() is None
+    return {"recording": is_recording}
+
+
 __all__ = [
     "set_voice_activation_service",
     "reset_voice_activation_service",
