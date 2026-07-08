@@ -11,6 +11,7 @@ interface VoiceSettingsResponse {
   stt_engine: 'local' | 'cloud'
   tts_engine: 'local' | 'cloud'
   whisper_model: string
+  stt_device: string
   deepgram_model: string
   elevenlabs_voice_id: string
   piper_voices: PiperVoice[]
@@ -19,13 +20,15 @@ interface VoiceSettingsResponse {
   stt_cloud_available: boolean
   tts_local_available: boolean
   tts_cloud_available: boolean
+  cuda_available: boolean
 }
 
 interface VoiceSettingsProps {
   onClose?: () => void
 }
 
-const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large']
+const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large', 'large-v3', 'large-v3-turbo', 'distil-large-v3']
+const STT_DEVICES = ['auto', 'cpu', 'cuda']
 
 async function fetchVoiceSettings(): Promise<VoiceSettingsResponse> {
   const res = await sidecarFetch('/api/voice/settings')
@@ -82,6 +85,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [sttEngine, setSttEngine] = useState<'local' | 'cloud'>('local')
   const [ttsEngine, setTtsEngine] = useState<'local' | 'cloud'>('local')
   const [whisperModel, setWhisperModel] = useState('tiny')
+  const [sttDevice, setSttDevice] = useState('auto')
   const [deepgramModel, setDeepgramModel] = useState('nova-2')
   const [deepgramKey, setDeepgramKey] = useState('')
   const [elevenlabsKey, setElevenlabsKey] = useState('')
@@ -101,6 +105,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
       setSttEngine(data.stt_engine)
       setTtsEngine(data.tts_engine)
       setWhisperModel(data.whisper_model)
+      setSttDevice(data.stt_device)
       setDeepgramModel(data.deepgram_model)
       setElevenlabsVoiceId(data.elevenlabs_voice_id)
     } catch (e) {
@@ -324,27 +329,55 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
           </div>
 
           {sttEngine === 'local' && (
-            <div>
-              <label
-                htmlFor="whisper-model-select"
-                className="mb-1 block text-sm font-medium text-text-primary"
-              >
-                Whisper Model
-              </label>
-              <select
-                id="whisper-model-select"
-                value={whisperModel}
-                onChange={(e) => handleWhisperModelChange(e.target.value)}
-                className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
-                data-testid="whisper-model-select"
-              >
-                {WHISPER_MODELS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div>
+                <label
+                  htmlFor="whisper-model-select"
+                  className="mb-1 block text-sm font-medium text-text-primary"
+                >
+                  Whisper Model
+                </label>
+                <select
+                  id="whisper-model-select"
+                  value={whisperModel}
+                  onChange={(e) => handleWhisperModelChange(e.target.value)}
+                  className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  data-testid="whisper-model-select"
+                >
+                  {WHISPER_MODELS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor="stt-device-select"
+                  className="mb-1 block text-sm font-medium text-text-primary"
+                >
+                  Compute Device
+                </label>
+                <select
+                  id="stt-device-select"
+                  value={sttDevice}
+                  onChange={(e) => void saveVoiceSettings({ stt_device: e.target.value })}
+                  className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  data-testid="stt-device-select"
+                >
+                  {STT_DEVICES.map((d) => (
+                    <option key={d} value={d} disabled={d === 'cuda' && !settings?.cuda_available}>
+                      {d === 'cuda' && !settings?.cuda_available ? `${d} (unavailable)` : d}
+                    </option>
+                  ))}
+                </select>
+                {settings?.cuda_available && (
+                  <p className="mt-1 text-xs text-status-success">
+                    NVIDIA GPU detected — CUDA available
+                  </p>
+                )}
+              </div>
+            </>
           )}
 
           {sttEngine === 'cloud' && (
