@@ -9,6 +9,7 @@ import { WelcomeBanner } from './components/WelcomeBanner'
 import { SidecarStatusBanner } from './components/SidecarStatus'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { AccessibilitySettings } from './components/AccessibilitySettings'
+import { ProviderSettings } from './components/ProviderSettings'
 import { UpdateNotification } from './components/UpdateNotification'
 import { UpdateSettings } from './components/UpdateSettings'
 import type { ConversationDetail } from './types/conversations'
@@ -19,6 +20,7 @@ function AppContent() {
   const [showThemePanel, setShowThemePanel] = useState(false)
   const [showA11yPanel, setShowA11yPanel] = useState(false)
   const [showUpdatePanel, setShowUpdatePanel] = useState(false)
+  const [showProviderPanel, setShowProviderPanel] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0)
 
@@ -64,6 +66,18 @@ function AppContent() {
               <path d="M19 7c-3 2-7 2-10 0" />
               <path d="M12 6v6" />
               <path d="M9 22l3-10 3 10" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setShowProviderPanel((v) => !v)}
+            className="p-2 rounded-md hover:bg-bg-secondary transition-colors text-text-muted hover:text-text-primary"
+            data-testid="provider-toggle-button"
+            aria-label="Toggle LLM provider settings"
+            aria-expanded={showProviderPanel}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M12 2a3 3 0 0 0-3 3v1H7a2 2 0 0 0-2 2v1H4a1 1 0 0 0 0 2h1v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2v-3h1a1 1 0 0 0 0-2h-1V8a2 2 0 0 0-2-2h-2V5a3 3 0 0 0-3-3z" />
+              <path d="M12 8v8M8 12h8" />
             </svg>
           </button>
           <button
@@ -127,6 +141,12 @@ function AppContent() {
         {showUpdatePanel && (
           <aside className="w-72 border-l border-border bg-bg-secondary p-4 overflow-y-auto">
             <UpdateSettings onClose={() => setShowUpdatePanel(false)} />
+          </aside>
+        )}
+
+        {showProviderPanel && (
+          <aside className="w-80 border-l border-border bg-bg-secondary p-4 overflow-y-auto">
+            <ProviderSettings onClose={() => setShowProviderPanel(false)} />
           </aside>
         )}
       </div>
