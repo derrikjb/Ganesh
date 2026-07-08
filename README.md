@@ -228,8 +228,8 @@ Open the history panel, select a conversation, and export it as JSON or Markdown
 
 Ganesh uses a hybrid YAML and JSON configuration system. The main config file lives at:
 
-- **Linux**: `~/.config/ganesh/config.yaml`
-- **Windows**: `%APPDATA%\ganesh\config.yaml`
+- **Linux**: `~/.ganesh/config.yaml`
+- **Windows**: `%USERPROFILE%\.ganesh\config.yaml`
 
 ### API Keys
 
@@ -414,10 +414,7 @@ cargo check
 
 ### Sidecar does not start
 
-Check that Python 3.11+ is installed and on your PATH. Run the preflight script to verify. If the sidecar crashes on launch, check the logs in:
-
-- **Linux**: `~/.local/share/ganesh/logs/`
-- **Windows**: `%APPDATA%\ganesh\logs\`
+Check that Python 3.11+ is installed and on your PATH. Run the preflight script to verify. If the sidecar crashes on launch, check the terminal or process output. The sidecar logs to stdout and stderr. There is no separate log file.
 
 ### Port binding errors
 
@@ -429,7 +426,7 @@ The Tauri CSP allows `connect-src` to `http://127.0.0.1:*`. If you modified `tau
 
 ### Voice models fail to download (minimal installer)
 
-Check your internet connection and disk space. The download resumes automatically. If it keeps failing, switch to the full installer or manually place models in `~/.local/share/ganesh/models/`.
+Check your internet connection and disk space. The download resumes automatically. If it keeps failing, switch to the full installer or manually place models in `~/.ganesh/models/`.
 
 ### PyInstaller binary fails to import a module
 
@@ -455,7 +452,7 @@ Install WebView2 from Microsoft's website. Most Windows 10/11 systems already ha
 
 ### Corrupted memory database
 
-Ganesh detects corrupted LanceDB or SQLite files on startup. It will attempt to repair or recreate them. You can also delete `~/.local/share/ganesh/memory/` (Linux) or `%APPDATA%\ganesh\memory\` (Windows) to reset.
+Ganesh detects corrupted LanceDB or SQLite files on startup. It will attempt to repair or recreate them. You can also delete `~/.ganesh/data/` (Linux) or `%USERPROFILE%\.ganesh\data\` (Windows) to reset.
 
 ### Disk full
 
