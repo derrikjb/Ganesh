@@ -47,6 +47,7 @@ from ganesh_backend.routers.patterns import router as patterns_router
 TAURI_ORIGINS: tuple[str, ...] = (
     "tauri://localhost",
     "https://tauri.localhost",
+    "http://localhost:5173",
 )
 
 # Loopback only — never expose the sidecar on a public interface.
