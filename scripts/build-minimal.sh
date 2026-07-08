@@ -35,6 +35,12 @@ cd "$BACKEND_DIR"
 echo "[1/3] Building PyInstaller sidecar (minimal, no models)..."
 pyinstaller pyinstaller-minimal.spec --noconfirm
 
+# Tauri's externalBin expects `ganesh-backend-<target-triple>`; PyInstaller
+# emits `dist/ganesh-backend`. Symlink the suffixed name onto it so
+# `cargo tauri build` can locate the sidecar.
+TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ {print $2}')"
+ln -sf ganesh-backend "./dist/ganesh-backend-${TARGET_TRIPLE}"
+
 # --- 2. Smoke test the frozen binary ----------------------------------------
 echo "[2/3] Verifying frozen binary (--check-imports)..."
 if [[ -x "./dist/ganesh-backend" ]]; then

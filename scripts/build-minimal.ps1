@@ -32,6 +32,12 @@ Write-Host "[1/3] Building PyInstaller sidecar (minimal, no models)..."
 pyinstaller pyinstaller-minimal.spec --noconfirm
 if ($LASTEXITCODE -ne 0) { Write-Error "PyInstaller build failed"; exit 1 }
 
+# Tauri's externalBin expects `ganesh-backend-<target-triple>.exe`; PyInstaller
+# emits `dist\ganesh-backend.exe`. Copy the suffixed name so `cargo tauri build`
+# can locate the sidecar.
+$TargetTriple = (& rustc -vV | Select-String '^host:').Line -replace '^host:\s*', ''
+Copy-Item "dist\ganesh-backend.exe" "dist\ganesh-backend-$TargetTriple.exe" -Force
+
 # --- 2. Smoke test the frozen binary ----------------------------------------
 Write-Host "[2/3] Verifying frozen binary (--check-imports)..."
 $exePath = Join-Path $BackendDir "dist\ganesh-backend.exe"

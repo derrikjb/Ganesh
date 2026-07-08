@@ -63,6 +63,12 @@ Write-Host "[3/4] Building PyInstaller sidecar (full, with models)..."
 pyinstaller pyinstaller-full.spec --noconfirm
 if ($LASTEXITCODE -ne 0) { Write-Error "PyInstaller build failed"; exit 1 }
 
+# Tauri's externalBin expects `ganesh-backend-<target-triple>.exe`; PyInstaller
+# emits `dist\ganesh-backend.exe`. Copy the suffixed name so `cargo tauri build`
+# can locate the sidecar.
+$TargetTriple = (& rustc -vV | Select-String '^host:').Line -replace '^host:\s*', ''
+Copy-Item "dist\ganesh-backend.exe" "dist\ganesh-backend-$TargetTriple.exe" -Force
+
 # --- 4. Tauri bundling ------------------------------------------------------
 if ($SkipTauri) {
     Write-Host "[4/4] Skipping Tauri build (-SkipTauri)"

@@ -68,6 +68,12 @@ export GANESH_MODELS_SRC="$MODELS_SRC"
 echo "[3/4] Building PyInstaller sidecar (full, with models)..."
 pyinstaller pyinstaller-full.spec --noconfirm
 
+# Tauri's externalBin expects `ganesh-backend-<target-triple>`; PyInstaller
+# emits `dist/ganesh-backend`. Symlink the suffixed name onto it so
+# `cargo tauri build` can locate the sidecar.
+TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ {print $2}')"
+ln -sf ganesh-backend "./dist/ganesh-backend-${TARGET_TRIPLE}"
+
 # --- 4. Tauri bundling ------------------------------------------------------
 if [[ "$SKIP_TAURI" == "1" ]]; then
     echo "[4/4] Skipping Tauri build (GANESH_SKIP_TAURI=1)"
