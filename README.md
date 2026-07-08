@@ -267,13 +267,57 @@ Local providers use LiteLLM's OpenAI-compatible routing. Cloud providers route t
 
 ### Voice Settings
 
+Voice settings are configured in-app via the Voice Settings panel (microphone icon in the header). The underlying config keys:
+
 ```yaml
 voice:
-  stt_engine: faster-whisper  # or cloud fallback
-  tts_engine: piper           # or cloud fallback
-  activation_mode: push-to-talk # or wake-word, vad
-  barge_in: true
+  stt_engine: local        # "local" (faster-whisper) or "cloud" (Deepgram)
+  tts_engine: local        # "local" (Piper) or "cloud" (ElevenLabs)
+  whisper_model: tiny      # tiny|base|small|medium|large|large-v3|large-v3-turbo|distil-large-v3
+  stt_device: auto         # "auto" | "cpu" | "cuda"
+  tts_device: auto         # "auto" | "cpu" | "cuda"
+  deepgram_model: nova-2
+  elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"
+  piper_voices: []         # list of {id, name, path} — managed via the UI file picker
+  piper_active_voice: null
 ```
+
+Cloud API keys for Deepgram and ElevenLabs are stored in the OS keyring, not in the config file. Set them via the Voice Settings panel.
+
+### GPU Acceleration (NVIDIA CUDA)
+
+STT (faster-whisper via CTranslate2) and TTS (Piper via ONNX Runtime) both support optional NVIDIA GPU acceleration. By default, `stt_device` and `tts_device` are set to `auto`, which detects CUDA and uses it if available. Users without NVIDIA GPUs are unaffected — the app runs on CPU.
+
+#### Prerequisites for GPU acceleration
+
+1. **NVIDIA GPU** with compute capability 6.0+ (Pascal architecture or newer).
+2. **NVIDIA driver** installed (any recent version).
+3. **CUDA Toolkit** — CTranslate2 bundles its own CUDA runtime, but ONNX Runtime GPU does not. Install the CUDA Toolkit that matches your `onnxruntime-gpu` version:
+   ```bash
+   # Check which CUDA version onnxruntime-gpu expects:
+   cd backend && ./venv/bin/pip show onnxruntime-gpu | grep -i requires
+
+   # Install CUDA Toolkit (example for CUDA 12.x on Ubuntu):
+   sudo apt-get install -y cuda-toolkit-12-x
+   # For CUDA 13.x, use the NVIDIA developer toolkit repository.
+   ```
+4. **Install GPU packages** in the backend venv:
+   ```bash
+   cd backend
+   ./venv/bin/pip install onnxruntime-gpu
+   # faster-whisper already supports CUDA via CTranslate2 — no extra install needed.
+   ```
+
+5. Verify GPU is detected:
+   ```bash
+   cd backend && ./venv/bin/python -c "
+   import ctranslate2; print('CTranslate2 CUDA devices:', ctranslate2.get_cuda_device_count())
+   import onnxruntime; print('ONNX providers:', onnxruntime.get_available_providers())
+   "
+   ```
+   You should see `CUDAExecutionProvider` in the ONNX providers list and a non-zero CUDA device count.
+
+If `CUDAExecutionProvider` is missing from the providers list, the CUDA Toolkit or `onnxruntime-gpu` is not installed correctly. The app will fall back to CPU automatically (when `stt_device`/`tts_device` is `auto`).
 
 ### Memory Settings
 
