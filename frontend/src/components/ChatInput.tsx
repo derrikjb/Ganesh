@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccessibility } from '../contexts/AccessibilityContext'
+import { useVoiceRecording } from '../hooks/useVoiceRecording'
 import type { AttachedFile } from '../types/chat'
 
 interface ChatInputProps {
@@ -17,6 +18,18 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [justSent, setJustSent] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { isRecording, isTranscribing, transcript, error, start, stop } =
+    useVoiceRecording()
+
+  useEffect(() => {
+    if (transcript) {
+      setText(transcript)
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto'
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`
+      }
+    }
+  }, [transcript])
 
   const handleFileSelect = useCallback((fileList: FileList) => {
     const files: AttachedFile[] = []
@@ -170,10 +183,28 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         {!textOnlyMode && (
           <button
             type="button"
-            disabled={disabled}
-            className="text-text-muted hover:text-accent transition-colors p-1 disabled:opacity-50"
-            aria-label="Voice input"
-            title="Voice input"
+            onClick={() => {
+              if (isTranscribing) return
+              if (isRecording) {
+                void stop()
+              } else {
+                void start()
+              }
+            }}
+            disabled={disabled || isTranscribing}
+            className={`p-1 transition-colors disabled:opacity-50 ${
+              isRecording
+                ? 'text-status-error animate-pulse'
+                : 'text-text-muted hover:text-accent'
+            }`}
+            aria-label={isRecording ? 'Stop recording' : 'Voice input'}
+            title={
+              isTranscribing
+                ? 'Transcribing...'
+                : isRecording
+                  ? 'Stop recording'
+                  : 'Voice input'
+            }
             data-testid="mic-button"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -209,6 +240,27 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           role="status"
         >
           Sent
+        </div>
+      )}
+
+      {(isRecording || isTranscribing) && (
+        <div
+          className="absolute -top-6 right-4 text-xs text-status-error bg-bg-elevated px-2 py-1 rounded-md shadow-md flex items-center gap-1.5"
+          data-testid="recording-indicator"
+          role="status"
+        >
+          <span className="w-2 h-2 rounded-full bg-status-error animate-pulse" />
+          {isTranscribing ? 'Transcribing...' : 'Recording...'}
+        </div>
+      )}
+
+      {error && (
+        <div
+          className="absolute -top-6 left-4 text-xs text-status-error bg-bg-elevated px-2 py-1 rounded-md shadow-md"
+          data-testid="voice-error"
+          role="alert"
+        >
+          {error}
         </div>
       )}
 
