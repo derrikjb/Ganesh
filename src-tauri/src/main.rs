@@ -145,7 +145,7 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
 
             let update_state = app.state::<UpdateState>();
             let config = update_state.config.lock().unwrap().clone();
-            if lib::should_auto_check(&config) {
+            if lib::should_auto_check(&config) && !cfg!(debug_assertions) {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     use tauri_plugin_updater::UpdaterExt;
