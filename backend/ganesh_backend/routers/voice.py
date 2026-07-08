@@ -177,6 +177,7 @@ class VoiceSettingsResponse(BaseModel):
     whisper_model: str
     stt_device: str
     tts_device: str
+    activation_mode: str
     deepgram_model: str
     elevenlabs_voice_id: str
     piper_voices: list[dict[str, Any]]
@@ -194,6 +195,7 @@ class VoiceSettingsUpdate(BaseModel):
     whisper_model: Optional[str] = None
     stt_device: Optional[str] = None
     tts_device: Optional[str] = None
+    activation_mode: Optional[str] = None
     deepgram_model: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
     piper_active_voice: Optional[str] = None
@@ -221,6 +223,7 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         whisper_model=config_service.get_setting("voice.whisper_model", "tiny"),
         stt_device=config_service.get_setting("voice.stt_device", "auto"),
         tts_device=config_service.get_setting("voice.tts_device", "auto"),
+        activation_mode=config_service.get_setting("voice.activation_mode", "click_to_talk"),
         deepgram_model=config_service.get_setting("voice.deepgram_model", "nova-2"),
         elevenlabs_voice_id=config_service.get_setting(
             "voice.elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM"
