@@ -70,7 +70,7 @@ function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
 }
 
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
-  const { messages, isStreaming, streamingContent, error, sendMessage, retryLast, loadConversation } = useChat()
+  const { messages, isStreaming, streamingContent, error, sendMessage, retryLast, loadConversation, clearMessages } = useChat()
   const { textOnlyMode, naturalPacingEnabled, naturalPacingSpeed } = useAccessibility()
   const { setState: setVisualizerState } = useVisualizerState()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -138,6 +138,12 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
     window.addEventListener('ganesh:load-conversation', handler)
     return () => window.removeEventListener('ganesh:load-conversation', handler)
   }, [loadConversation])
+
+  useEffect(() => {
+    const handler = () => clearMessages()
+    window.addEventListener('ganesh:conversation-deleted', handler)
+    return () => window.removeEventListener('ganesh:conversation-deleted', handler)
+  }, [clearMessages])
 
   useEffect(() => {
     if (messagesEndRef.current && !showScrollButton) {

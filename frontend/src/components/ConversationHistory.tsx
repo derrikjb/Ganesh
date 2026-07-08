@@ -121,6 +121,7 @@ export function ConversationHistory({ onSelect, refreshKey = 0 }: ConversationHi
         if (searchResults) {
           setSearchResults((prev) => (prev ?? []).filter((c) => c.id !== id))
         }
+        window.dispatchEvent(new CustomEvent('ganesh:conversation-deleted', { detail: { id } }))
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Delete failed')
       }
