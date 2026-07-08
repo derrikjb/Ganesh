@@ -6,8 +6,8 @@ interface ChatMessageProps {
   onOpenDocument?: (file: { name: string; type: string; size: number; content: string }) => void
 }
 
-function formatTimestamp(date: Date): string {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+function formatTimestamp(date: Date | string): string {
+  return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 function renderMarkdownLike(content: string): string {
