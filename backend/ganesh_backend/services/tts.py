@@ -182,7 +182,7 @@ class TTSService:
     def _piper_importable(self) -> bool:
         try:
             import piper  # noqa: F401
-        except ImportError:
+        except Exception:
             return False
         return True
 
