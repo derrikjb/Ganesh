@@ -176,6 +176,7 @@ class VoiceSettingsResponse(BaseModel):
     tts_engine: str
     whisper_model: str
     stt_device: str
+    tts_device: str
     deepgram_model: str
     elevenlabs_voice_id: str
     piper_voices: list[dict[str, Any]]
@@ -192,6 +193,7 @@ class VoiceSettingsUpdate(BaseModel):
     tts_engine: Optional[str] = None
     whisper_model: Optional[str] = None
     stt_device: Optional[str] = None
+    tts_device: Optional[str] = None
     deepgram_model: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
     piper_active_voice: Optional[str] = None
@@ -218,6 +220,7 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         tts_engine=config_service.get_setting("voice.tts_engine", "local"),
         whisper_model=config_service.get_setting("voice.whisper_model", "tiny"),
         stt_device=config_service.get_setting("voice.stt_device", "auto"),
+        tts_device=config_service.get_setting("voice.tts_device", "auto"),
         deepgram_model=config_service.get_setting("voice.deepgram_model", "nova-2"),
         elevenlabs_voice_id=config_service.get_setting(
             "voice.elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM"
@@ -248,6 +251,10 @@ async def update_voice_settings(req: VoiceSettingsUpdate) -> Any:
         stt_service.reset_model_cache()
     if "stt_device" in updates and updates["stt_device"] != old_device:
         stt_service.reset_model_cache()
+    old_tts_device = config_service.get_setting("voice.tts_device", "auto")
+    if "tts_device" in updates and updates["tts_device"] != old_tts_device:
+        service = get_tts_service()
+        service._voice_cache.clear()
     return _build_voice_settings()
 
 

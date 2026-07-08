@@ -38,6 +38,7 @@ DEFAULT_CONFIG = {
         "tts_engine": "local",        # "local" | "cloud"
         "whisper_model": "tiny",      # tiny|base|small|medium|large|large-v3|large-v3-turbo|distil-large-v3
         "stt_device": "auto",         # "auto" | "cpu" | "cuda"
+        "tts_device": "auto",         # "auto" | "cpu" | "cuda"
         "deepgram_model": "nova-2",   # Deepgram model name
         "piper_voices": [],           # list of {"id": str, "name": str, "path": str}
         "piper_active_voice": None,   # voice id string or None

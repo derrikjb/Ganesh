@@ -12,6 +12,7 @@ interface VoiceSettingsResponse {
   tts_engine: 'local' | 'cloud'
   whisper_model: string
   stt_device: string
+  tts_device: string
   deepgram_model: string
   elevenlabs_voice_id: string
   piper_voices: PiperVoice[]
@@ -29,6 +30,7 @@ interface VoiceSettingsProps {
 
 const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large', 'large-v3', 'large-v3-turbo', 'distil-large-v3']
 const STT_DEVICES = ['auto', 'cpu', 'cuda']
+const TTS_DEVICES = ['auto', 'cpu', 'cuda']
 
 async function fetchVoiceSettings(): Promise<VoiceSettingsResponse> {
   const res = await sidecarFetch('/api/voice/settings')
@@ -86,6 +88,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [ttsEngine, setTtsEngine] = useState<'local' | 'cloud'>('local')
   const [whisperModel, setWhisperModel] = useState('tiny')
   const [sttDevice, setSttDevice] = useState('auto')
+  const [ttsDevice, setTtsDevice] = useState('auto')
   const [deepgramModel, setDeepgramModel] = useState('nova-2')
   const [deepgramKey, setDeepgramKey] = useState('')
   const [elevenlabsKey, setElevenlabsKey] = useState('')
@@ -106,6 +109,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
       setTtsEngine(data.tts_engine)
       setWhisperModel(data.whisper_model)
       setSttDevice(data.stt_device)
+      setTtsDevice(data.tts_device)
       setDeepgramModel(data.deepgram_model)
       setElevenlabsVoiceId(data.elevenlabs_voice_id)
     } catch (e) {
@@ -504,6 +508,27 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
 
           {ttsEngine === 'local' && (
             <div className="space-y-3">
+              <div>
+                <label
+                  htmlFor="tts-device-select"
+                  className="mb-1 block text-sm font-medium text-text-primary"
+                >
+                  Compute Device
+                </label>
+                <select
+                  id="tts-device-select"
+                  value={ttsDevice}
+                  onChange={(e) => void saveVoiceSettings({ tts_device: e.target.value })}
+                  className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  data-testid="tts-device-select"
+                >
+                  {TTS_DEVICES.map((d) => (
+                    <option key={d} value={d} disabled={d === 'cuda' && !settings?.cuda_available}>
+                      {d === 'cuda' && !settings?.cuda_available ? `${d} (unavailable)` : d}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <h4 className="mb-2 text-sm font-medium text-text-primary">Piper Voices</h4>
                 {piperVoices.length === 0 && (

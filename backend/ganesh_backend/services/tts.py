@@ -202,9 +202,24 @@ class TTSService:
             return cached
         import piper
 
-        voice = piper.PiperVoice.load(model_path)
+        use_cuda = self._resolve_use_cuda()
+        voice = piper.PiperVoice.load(model_path, use_cuda=use_cuda)
         self._voice_cache[model_path] = voice
         return voice
+
+    @staticmethod
+    def _resolve_use_cuda() -> bool:
+        preference = config_service.get_setting("voice.tts_device", "auto")
+        if preference == "cpu":
+            return False
+        if preference == "cuda":
+            return True
+        # auto: use CUDA if onnxruntime has the CUDA execution provider
+        try:
+            import onnxruntime
+            return "CUDAExecutionProvider" in onnxruntime.get_available_providers()
+        except Exception:
+            return False
 
     def _render_piper_wav(self, piper_voice: Any, text: str) -> bytes:
         cfg = getattr(piper_voice, "config", None)
