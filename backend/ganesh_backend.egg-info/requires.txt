@@ -5,6 +5,10 @@ pydantic
 keyring
 pyyaml
 python-multipart
+lancedb
+mem0ai
+piper-tts
+vaderSentiment
 
 [dev]
 pytest
@@ -12,3 +16,6 @@ pytest-asyncio
 mypy
 ruff
 httpx
+
+[prod]
+sentence-transformers

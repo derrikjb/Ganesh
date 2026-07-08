@@ -9,9 +9,15 @@ Requires-Dist: pydantic
 Requires-Dist: keyring
 Requires-Dist: pyyaml
 Requires-Dist: python-multipart
+Requires-Dist: lancedb
+Requires-Dist: mem0ai
+Requires-Dist: piper-tts
+Requires-Dist: vaderSentiment
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: pytest-asyncio; extra == "dev"
 Requires-Dist: mypy; extra == "dev"
 Requires-Dist: ruff; extra == "dev"
 Requires-Dist: httpx; extra == "dev"
+Provides-Extra: prod
+Requires-Dist: sentence-transformers; extra == "prod"
