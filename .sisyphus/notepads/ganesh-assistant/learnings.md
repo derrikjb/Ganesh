@@ -775,3 +775,22 @@
     - Updated `ganesh_backend/embeddings.py` to use `Any` for lazy-loaded models.
     - Added type hints to fallback `VectorStoreBase` in `ganesh_backend/vector_store.py`.
     - Suppressed `misc` error for subclassing `Any` (when `mem0` is missing) in `ganesh_backend/vector_store.py`.
+
+## F3 Final QA (2026-07-07)
+- Sidecar starts cleanly on ephemeral port; `PORT: <port>` printed to stdout. Health/CORS/shutdown all functional.
+- All 14 core QA scenarios PASS: health, chat (401/422/400 error paths), memory CRUD, file browsing (with security: 403 blocked, 404 missing, traversal blocked), web search (DuckDuckGo), config round-trip, provider switching, personality traits (get/update/lock/shift/unlock/reset/system-prompt), profiles + per-profile memory isolation, conversation history (create/list/get/search/export/delete), error recovery (memory integrity, empty states), text-only mode (voice status endpoints), theme switching (config round-trip).
+- Edge cases (10 tested): empty state, empty content (422), missing field (422), rapid 5x concurrent stores (all persisted), 11MB file read (413), non-existent memory/profile/conversation (404), 500-char search query (200), directory read (400). All handled gracefully.
+- Cross-task integration (5 tested): memory+profiles+personality, config+chat, tasks+agents, plugins+memory, conversations+profiles. All functional.
+- Sidecar crash test: killed process, restarted, data persisted across crash (LanceDB survived), orphaned task recovery works.
+- Backend pytest: 225 passed, 4 failed (pre-existing test_models.py failures - file path issues in download tests, unrelated to QA).
+- Frontend vitest: 229/229 passed (30 test files).
+- Playwright integration: 6/6 passed (app launch, sidecar health, connected state, CORS, sidecar restart, reconnect).
+- --check-imports: all native deps import successfully.
+- Minor note: chat endpoint reports "openai" in 401 error even when provider is set to "anthropic" via config - the chat endpoint uses the provider from the request body, not the config. This is by design (per-request provider override).
+- Windows-specific scenarios (system tray, global hotkey, single-instance lock, native file dialogs) cannot be tested on Linux - CI-dependent.
+- To untrack a file without deleting it from disk, use `git rm --cached <file>`.
+- Always verify with `git check-ignore -v <file>` to ensure the ignore pattern is working as expected.
+## Untracking runtime logs
+- To untrack a file while keeping it on disk, use `git rm --cached <file>`.
+- Always add the untracked file to `.gitignore` to prevent it from being accidentally re-added.
+- If a file is already staged for deletion but exists on disk, it is effectively being untracked.

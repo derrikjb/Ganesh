@@ -2802,7 +2802,7 @@ Max Concurrent: 6 (Waves 0 & 1)
 
 ---
 
-- [ ] 41. Bundle Size Budget Enforcement + Final CI Hardening
+- [x] 41. Bundle Size Budget Enforcement + Final CI Hardening
 
   **What to do**:
   - Add CI step: after build, check bundle size

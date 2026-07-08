@@ -30,6 +30,9 @@ Thumbs.db
 *.swp
 *~
 
+# Logs
+backend/server.log
+
 # LanceDB test artifacts
 backend/:memory:/
 .vscode/
