@@ -486,56 +486,6 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
           </div>
         </div>
 
-        {/* Microphone Section */}
-        <div>
-          <h3 className="mb-2 text-sm font-medium text-text-primary">Microphone</h3>
-          <div className="mb-3">
-            <label htmlFor="mic-device-select" className="mb-1 block text-sm font-medium text-text-primary">
-              Input Device
-            </label>
-            <select
-              id="mic-device-select"
-              value={inputDevice}
-              onChange={(e) => void handleInputDeviceChange(e.target.value)}
-              className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
-              data-testid="mic-device-select"
-            >
-              <option value="">Default</option>
-              {devices.map((device) => (
-                <option key={device.id} value={device.id}>
-                  {device.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <button
-              type="button"
-              onClick={testing ? handleTestMicStop : handleTestMicStart}
-              className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
-              data-testid="test-mic-button"
-            >
-              {testing ? 'Stop Test' : 'Test Microphone'}
-            </button>
-            {testing && (
-              <div className="mt-2">
-                <div className="w-full h-3 rounded bg-bg-tertiary overflow-hidden">
-                  <div
-                    className="h-full bg-status-success transition-all duration-75"
-                    style={{ width: `${level * 100}%` }}
-                  />
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <p className="text-xs text-text-muted">{Math.round(level * 100)}%</p>
-                  {level < 0.01 && (
-                    <p className="text-xs text-status-warning">No input detected</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* STT Section */}
         <div>
           <h3 className="mb-2 text-sm font-medium text-text-primary">Speech-to-Text</h3>

@@ -424,15 +424,25 @@ def _list_input_devices() -> list[dict[str, str]]:
     if shutil.which("pactl"):
         try:
             result = subprocess.run(
-                ["pactl", "list", "short", "sources"],
+                ["pactl", "list", "sources"],
                 capture_output=True, text=True, timeout=5,
             )
-            for line in result.stdout.strip().splitlines():
-                parts = line.split("\t")
-                if len(parts) >= 2 and not parts[1].endswith(".monitor"):
-                    name = parts[1]
-                    desc = parts[3] if len(parts) > 3 else name
-                    devices.append({"id": name, "name": desc, "backend": "pipewire"})
+            name: Optional[str] = None
+            desc: Optional[str] = None
+            for line in result.stdout.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("Name:"):
+                    name = stripped[5:].strip()
+                elif stripped.startswith("Description:"):
+                    desc = stripped.split(":", 1)[1].strip()
+                    if name and not name.endswith(".monitor"):
+                        devices.append({
+                            "id": name,
+                            "name": desc or name,
+                            "backend": "pipewire",
+                        })
+                    name = None
+                    desc = None
         except Exception:
             pass
 
