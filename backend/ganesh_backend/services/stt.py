@@ -103,11 +103,10 @@ def _resolve_device() -> tuple[str, str]:
     if preference == "cpu":
         return "cpu", "int8"
     if preference == "cuda":
-        if _cuda_device_count() == 0:
-            raise STTError("stt_device is 'cuda' but no CUDA device was found")
+        if not _cuda_usable():
+            raise STTError("stt_device is 'cuda' but CUDA libraries are not available. Install the CUDA Toolkit.")
         return "cuda", "float16"
-    # auto: use CUDA if available, else CPU
-    if _cuda_device_count() > 0:
+    if _cuda_usable():
         return "cuda", "float16"
     return "cpu", "int8"
 
@@ -120,8 +119,25 @@ def _cuda_device_count() -> int:
         return 0
 
 
+def _cuda_usable() -> bool:
+    """Check that CUDA is not just detected but actually loadable.
+
+    CTranslate2 can report a device count > 0 based on the NVIDIA driver,
+    but the actual CUDA runtime libraries (libcublas, libcudnn) may not be
+    installed. This does a trial library load to verify.
+    """
+    if _cuda_device_count() == 0:
+        return False
+    try:
+        import ctypes
+        ctypes.CDLL("libcublas.so.12")
+    except OSError:
+        return False
+    return True
+
+
 def is_cuda_available() -> bool:
-    return _cuda_device_count() > 0
+    return _cuda_usable()
 
 
 def _load_local_model(model_name: str = DEFAULT_MODEL) -> Any:
@@ -147,8 +163,18 @@ def _load_local_model(model_name: str = DEFAULT_MODEL) -> Any:
     try:
         _model_cache = WhisperModel(model_name, device=device, compute_type=compute_type)
     except Exception as exc:  # noqa: BLE001 - many failure modes from CT2
-        _model_cache = None
-        raise STTError(f"failed to load Whisper model '{model_name}' on {device}: {exc}") from exc
+        if device == "cuda":
+            try:
+                _model_cache = WhisperModel(model_name, device="cpu", compute_type="int8")
+            except Exception:
+                _model_cache = None
+                raise STTError(
+                    f"failed to load Whisper model '{model_name}' on cuda ({exc}); "
+                    f"CPU fallback also failed"
+                ) from exc
+        else:
+            _model_cache = None
+            raise STTError(f"failed to load Whisper model '{model_name}' on {device}: {exc}") from exc
 
     return _model_cache
 
