@@ -13,6 +13,7 @@ interface VoiceSettingsResponse {
   stt_engine: 'local' | 'cloud'
   tts_engine: 'local' | 'cloud'
   whisper_model: string
+  stt_language: string | null
   stt_device: string
   tts_device: string
   deepgram_model: string
@@ -94,6 +95,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [sttEngine, setSttEngine] = useState<'local' | 'cloud'>('local')
   const [ttsEngine, setTtsEngine] = useState<'local' | 'cloud'>('local')
   const [whisperModel, setWhisperModel] = useState('tiny')
+  const [sttLanguage, setSttLanguage] = useState<string>('')
   const [sttDevice, setSttDevice] = useState('auto')
   const [ttsDevice, setTtsDevice] = useState('auto')
   const [deepgramModel, setDeepgramModel] = useState('nova-2')
@@ -119,6 +121,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
       setSttEngine(data.stt_engine)
       setTtsEngine(data.tts_engine)
       setWhisperModel(data.whisper_model)
+      setSttLanguage(data.stt_language ?? '')
       setSttDevice(data.stt_device)
       setTtsDevice(data.tts_device)
       setDeepgramModel(data.deepgram_model)
@@ -588,6 +591,39 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                     NVIDIA GPU detected — CUDA available
                   </p>
                 )}
+              </div>
+              <div>
+                <label
+                  htmlFor="stt-language-select"
+                  className="mb-1 block text-sm font-medium text-text-primary"
+                >
+                  Language
+                </label>
+                <select
+                  id="stt-language-select"
+                  value={sttLanguage}
+                  onChange={(e) => void saveVoiceSettings({ stt_language: e.target.value || null })}
+                  className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  data-testid="stt-language-select"
+                >
+                  <option value="">Auto-detect</option>
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                  <option value="it">Italian</option>
+                  <option value="pt">Portuguese</option>
+                  <option value="ru">Russian</option>
+                  <option value="ja">Japanese</option>
+                  <option value="ko">Korean</option>
+                  <option value="zh">Chinese</option>
+                  <option value="ar">Arabic</option>
+                  <option value="hi">Hindi</option>
+                  <option value="tr">Turkish</option>
+                  <option value="nl">Dutch</option>
+                  <option value="pl">Polish</option>
+                  <option value="sv">Swedish</option>
+                </select>
               </div>
             </>
           )}

@@ -36,6 +36,7 @@ DEFAULT_CONFIG = {
         "tts_enabled": False,
         "activation_mode": "click_to_talk",  # "click_to_talk" | "push_to_talk" | "vad"
         "input_device": None,        # source name from pactl, or None for default
+        "stt_language": None,         # ISO-639-1 code (e.g. "en") or None for auto-detect
         "stt_engine": "local",        # "local" | "cloud"
         "tts_engine": "local",        # "local" | "cloud"
         "whisper_model": "tiny",      # tiny|base|small|medium|large|large-v3|large-v3-turbo|distil-large-v3

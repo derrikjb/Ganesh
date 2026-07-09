@@ -179,6 +179,7 @@ class VoiceSettingsResponse(BaseModel):
     tts_device: str
     activation_mode: str
     input_device: Optional[str]
+    stt_language: Optional[str]
     deepgram_model: str
     elevenlabs_voice_id: str
     piper_voices: list[dict[str, Any]]
@@ -198,6 +199,7 @@ class VoiceSettingsUpdate(BaseModel):
     tts_device: Optional[str] = None
     activation_mode: Optional[str] = None
     input_device: Optional[str] = None
+    stt_language: Optional[str] = None
     deepgram_model: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
     piper_active_voice: Optional[str] = None
@@ -227,6 +229,7 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         tts_device=config_service.get_setting("voice.tts_device", "auto"),
         activation_mode=config_service.get_setting("voice.activation_mode", "click_to_talk"),
         input_device=config_service.get_setting("voice.input_device"),
+        stt_language=config_service.get_setting("voice.stt_language"),
         deepgram_model=config_service.get_setting("voice.deepgram_model", "nova-2"),
         elevenlabs_voice_id=config_service.get_setting(
             "voice.elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM"
@@ -625,8 +628,9 @@ async def stop_recording() -> Any:
     if not path or not os.path.exists(path):
         raise HTTPException(status_code=500, detail="Recording file not found")
 
+    language = config_service.get_setting("voice.stt_language")
     try:
-        result = await stt_service.transcribe_async(path)
+        result = await stt_service.transcribe_async(path, language=language)
     except stt_service.STTError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
