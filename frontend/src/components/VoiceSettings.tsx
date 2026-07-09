@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
+import { invoke } from '@tauri-apps/api/core'
 import { sidecarFetch } from '../api'
 
 interface PiperVoice {
@@ -87,6 +88,8 @@ async function saveApiKey(provider: string, apiKey: string): Promise<void> {
 export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [settings, setSettings] = useState<VoiceSettingsResponse | null>(null)
   const [activationMode, setActivationMode] = useState<'click_to_talk' | 'push_to_talk' | 'vad'>('click_to_talk')
+  const [pttHotkey, setPttHotkey] = useState('Control+Space')
+  const [pttHotkeySaving, setPttHotkeySaving] = useState(false)
   const [sttEngine, setSttEngine] = useState<'local' | 'cloud'>('local')
   const [ttsEngine, setTtsEngine] = useState<'local' | 'cloud'>('local')
   const [whisperModel, setWhisperModel] = useState('tiny')
@@ -124,6 +127,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
 
   useEffect(() => {
     void loadSettings()
+    invoke<string>('get_ptt_hotkey').then(setPttHotkey).catch(() => {})
   }, [loadSettings])
 
   const handleSttEngineChange = async (engine: 'local' | 'cloud') => {
@@ -310,9 +314,49 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
           </select>
           <p className="mt-1 text-xs text-text-muted">
             {activationMode === 'click_to_talk' && 'Click the mic button to start/stop recording.'}
-            {activationMode === 'push_to_talk' && 'Hold the mic button to record, release to stop.'}
+            {activationMode === 'push_to_talk' && 'Press the hotkey to start/stop recording. Works even when the window is hidden.'}
             {activationMode === 'vad' && 'Automatically starts recording when you speak.'}
           </p>
+          {activationMode === 'push_to_talk' && (
+            <div className="mt-2">
+              <label htmlFor="ptt-hotkey-input" className="mb-1 block text-xs text-text-secondary">
+                Push-to-Talk Hotkey
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="ptt-hotkey-input"
+                  type="text"
+                  value={pttHotkey}
+                  onChange={(e) => setPttHotkey(e.target.value)}
+                  placeholder="Control+Space"
+                  className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  data-testid="ptt-hotkey-input"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setPttHotkeySaving(true)
+                    try {
+                      const result = await invoke<string>('set_ptt_hotkey', { hotkey: pttHotkey })
+                      setPttHotkey(result)
+                    } catch {
+                      setError('Failed to set hotkey. Use format like Control+Space or Alt+Shift+R.')
+                    } finally {
+                      setPttHotkeySaving(false)
+                    }
+                  }}
+                  disabled={pttHotkeySaving}
+                  className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
+                  data-testid="ptt-hotkey-save"
+                >
+                  {pttHotkeySaving ? 'Saving…' : 'Set'}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-text-muted">
+                Use modifier+key format (e.g. Control+Space, Alt+Shift+R, Super+M).
+              </p>
+            </div>
+          )}
         </div>
 
         {/* STT Section */}

@@ -44,6 +44,18 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   }, [])
 
   useEffect(() => {
+    const handler = () => {
+      if (isRecording) {
+        void stop()
+      } else if (!isTranscribing) {
+        void start()
+      }
+    }
+    window.addEventListener('ganesh:ptt-toggle', handler)
+    return () => window.removeEventListener('ganesh:ptt-toggle', handler)
+  }, [isRecording, isTranscribing, start, stop])
+
+  useEffect(() => {
     if (transcript) {
       setText(transcript)
       if (textareaRef.current) {
