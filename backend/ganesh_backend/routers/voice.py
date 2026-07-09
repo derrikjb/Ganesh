@@ -178,6 +178,7 @@ class VoiceSettingsResponse(BaseModel):
     stt_device: str
     tts_device: str
     activation_mode: str
+    input_device: Optional[str]
     deepgram_model: str
     elevenlabs_voice_id: str
     piper_voices: list[dict[str, Any]]
@@ -196,6 +197,7 @@ class VoiceSettingsUpdate(BaseModel):
     stt_device: Optional[str] = None
     tts_device: Optional[str] = None
     activation_mode: Optional[str] = None
+    input_device: Optional[str] = None
     deepgram_model: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
     piper_active_voice: Optional[str] = None
@@ -224,6 +226,7 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         stt_device=config_service.get_setting("voice.stt_device", "auto"),
         tts_device=config_service.get_setting("voice.tts_device", "auto"),
         activation_mode=config_service.get_setting("voice.activation_mode", "click_to_talk"),
+        input_device=config_service.get_setting("voice.input_device"),
         deepgram_model=config_service.get_setting("voice.deepgram_model", "nova-2"),
         elevenlabs_voice_id=config_service.get_setting(
             "voice.elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM"
@@ -407,6 +410,160 @@ async def reset_voice_state() -> Any:
 
 _recording_proc: Optional[Any] = None
 _recording_path: Optional[str] = None
+_test_proc: Optional[Any] = None
+_test_level: float = 0.0
+_test_thread: Optional[Any] = None
+_test_fifo: Optional[str] = None
+
+
+def _list_input_devices() -> list[dict[str, str]]:
+    import subprocess
+    import shutil
+
+    devices: list[dict[str, str]] = []
+    if shutil.which("pactl"):
+        try:
+            result = subprocess.run(
+                ["pactl", "list", "short", "sources"],
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.strip().splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2 and not parts[1].endswith(".monitor"):
+                    name = parts[1]
+                    desc = parts[3] if len(parts) > 3 else name
+                    devices.append({"id": name, "name": desc, "backend": "pipewire"})
+        except Exception:
+            pass
+
+    if not devices and shutil.which("arecord"):
+        try:
+            result = subprocess.run(
+                ["arecord", "-l"],
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.splitlines():
+                if "card" in line.lower():
+                    devices.append({"id": line.strip(), "name": line.strip(), "backend": "alsa"})
+        except Exception:
+            pass
+
+    return devices
+
+
+def _build_record_cmd(path: str, raw: bool = False) -> list[str]:
+    import shutil
+
+    device = config_service.get_setting("voice.input_device")
+    fmt = "s16le" if raw else "wav"
+    rate = "16000" if raw else "44100"
+
+    if shutil.which("parecord"):
+        cmd = ["parecord", "--format=s16le", "--rate=44100", "--channels=1"]
+        if raw:
+            cmd += ["--file-format=raw", "--raw-format=s16le"]
+        else:
+            cmd += ["--file-format=wav"]
+        if device:
+            cmd += [f"--device={device}"]
+        cmd += [path]
+        return cmd
+
+    if shutil.which("arecord"):
+        cmd = ["arecord", "-f", "cd", "-t", fmt, "-q", "-r", rate]
+        if device:
+            cmd += ["-D", device]
+        cmd += [path]
+        return cmd
+
+    raise RuntimeError("No audio recording tool found")
+
+
+@router.get("/devices")
+async def list_devices() -> Any:
+    return {"devices": _list_input_devices()}
+
+
+@router.post("/test-mic/start")
+async def start_mic_test() -> Any:
+    import subprocess
+    import threading
+    import struct
+    import math
+    import stat as stat_mod
+
+    global _test_proc, _test_level, _test_thread, _test_fifo
+
+    if _test_proc is not None and _test_proc.poll() is None:
+        raise HTTPException(status_code=409, detail="Mic test already running")
+
+    fifo_path = tempfile.mktemp(suffix=".fifo")
+    os.mkfifo(fifo_path)
+    _test_fifo = fifo_path
+
+    try:
+        cmd = _build_record_cmd(fifo_path, raw=True)
+        _test_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except Exception as exc:
+        os.unlink(fifo_path)
+        _test_fifo = None
+        raise HTTPException(status_code=500, detail=f"Failed to start mic test: {exc}") from exc
+
+    _test_level = 0.0
+
+    def monitor():
+        global _test_level
+        fifo = _test_fifo
+        proc = _test_proc
+        if fifo is None or proc is None:
+            return
+        fd = None
+        import time
+        for _ in range(50):
+            try:
+                fd = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+                break
+            except OSError:
+                time.sleep(0.1)
+        if fd is None:
+            return
+        while proc.poll() is None:
+            try:
+                chunk = os.read(fd, 2048)
+            except BlockingIOError:
+                time.sleep(0.01)
+                continue
+            if not chunk or len(chunk) < 2:
+                continue
+            count = len(chunk) // 2
+            samples = struct.unpack(f"<{count}h", chunk[:count * 2])
+            if samples:
+                rms = math.sqrt(sum(s * s for s in samples) / count)
+                _test_level = min(1.0, rms / 32768.0)
+        if fd is not None:
+            os.close(fd)
+
+    _test_thread = threading.Thread(target=monitor, daemon=True)
+    _test_thread.start()
+
+    return {"status": "monitoring"}
+
+
+@router.get("/test-mic/level")
+async def get_mic_level() -> Any:
+    return {"level": _test_level, "active": _test_proc is not None and _test_proc.poll() is None}
+
+
+@router.post("/test-mic/stop")
+async def stop_mic_test() -> Any:
+    global _test_proc, _test_level, _test_thread
+    if _test_proc is None or _test_proc.poll() is not None:
+        return {"status": "stopped"}
+    _test_proc.terminate()
+    _test_proc.wait(timeout=3)
+    _test_proc = None
+    _test_level = 0.0
+    return {"status": "stopped"}
 
 
 @router.post("/record/start")
@@ -421,29 +578,10 @@ async def start_recording() -> Any:
     tmp.close()
 
     import subprocess
-    import shutil
-    import sys
 
     try:
-        if shutil.which("parecord"):
-            _recording_proc = subprocess.Popen(
-                ["parecord", "--format=s16le", "--rate=44100", "--channels=1", "--file-format=wav", _recording_path],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-            )
-        elif shutil.which("arecord"):
-            _recording_proc = subprocess.Popen(
-                ["arecord", "-f", "cd", "-t", "wav", "-q", _recording_path],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-            )
-        else:
-            os.unlink(_recording_path)
-            _recording_path = None
-            raise HTTPException(
-                status_code=500,
-                detail="No audio recording tool found. Install alsa-utils or pulseaudio-utils.",
-            )
+        cmd = _build_record_cmd(_recording_path)
+        _recording_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     except Exception as exc:
         if _recording_path and os.path.exists(_recording_path):
             os.unlink(_recording_path)
