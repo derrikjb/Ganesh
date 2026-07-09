@@ -576,7 +576,11 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                 <select
                   id="stt-device-select"
                   value={sttDevice}
-                  onChange={(e) => void saveVoiceSettings({ stt_device: e.target.value })}
+                  onChange={async (e) => {
+                    const updated = await saveVoiceSettings({ stt_device: e.target.value })
+                    setSettings(updated)
+                    setSttDevice(updated.stt_device)
+                  }}
                   className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
                   data-testid="stt-device-select"
                 >
@@ -602,7 +606,11 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                 <select
                   id="stt-language-select"
                   value={sttLanguage}
-                  onChange={(e) => void saveVoiceSettings({ stt_language: e.target.value || null })}
+                  onChange={async (e) => {
+                    const updated = await saveVoiceSettings({ stt_language: e.target.value || null })
+                    setSettings(updated)
+                    setSttLanguage(e.target.value || '')
+                  }}
                   className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
                   data-testid="stt-language-select"
                 >
@@ -762,7 +770,11 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                 <select
                   id="tts-device-select"
                   value={ttsDevice}
-                  onChange={(e) => void saveVoiceSettings({ tts_device: e.target.value })}
+                  onChange={async (e) => {
+                    const updated = await saveVoiceSettings({ tts_device: e.target.value })
+                    setSettings(updated)
+                    setTtsDevice(updated.tts_device)
+                  }}
                   className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
                   data-testid="tts-device-select"
                 >
