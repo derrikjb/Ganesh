@@ -465,25 +465,27 @@ def _build_record_cmd(path: str, raw: bool = False) -> list[str]:
     import shutil
 
     device = config_service.get_setting("voice.input_device")
-    fmt = "s16le" if raw else "wav"
-    rate = "16000" if raw else "44100"
 
     if shutil.which("parecord"):
         cmd = ["parecord", "--format=s16le", "--rate=44100", "--channels=1"]
         if raw:
-            cmd += ["--file-format=raw", "--raw-format=s16le"]
+            cmd.append("--raw")
         else:
-            cmd += ["--file-format=wav"]
+            cmd.append("--file-format=wav")
         if device:
-            cmd += [f"--device={device}"]
-        cmd += [path]
+            cmd.append(f"--device={device}")
+        cmd.append(path)
         return cmd
 
     if shutil.which("arecord"):
-        cmd = ["arecord", "-f", "cd", "-t", fmt, "-q", "-r", rate]
+        cmd = ["arecord", "-q", "-r", "44100", "-c", "1"]
+        if raw:
+            cmd += ["-t", "raw", "-f", "S16_LE"]
+        else:
+            cmd += ["-t", "wav", "-f", "cd"]
         if device:
             cmd += ["-D", device]
-        cmd += [path]
+        cmd.append(path)
         return cmd
 
     raise RuntimeError("No audio recording tool found")
