@@ -33,6 +33,8 @@ pub const TRAY_QUIT_ID: &str = "tray_quit";
 /// platforms). macOS is out of scope; if it ever lands, swap to `Super+Shift+G`.
 pub const HOTKEY_TOGGLE: &str = "Control+Shift+G";
 
+pub const PTT_HOTKEY_DEFAULT: &str = "Control+Space";
+
 /// The ordered `(id, label)` pairs that make up the tray context menu.
 ///
 /// Kept as pure data so the menu structure can be unit-tested without

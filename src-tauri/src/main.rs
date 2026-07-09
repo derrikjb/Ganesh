@@ -3,10 +3,11 @@
 
 use ganesh_lib::{
     self as lib, shutdown_sidecar, spawn_sidecar, SidecarState, DEFAULT_SHUTDOWN_TIMEOUT,
-    HOTKEY_TOGGLE, TRAY_HIDE_ID, TRAY_QUIT_ID, TRAY_SHOW_ID,
+    HOTKEY_TOGGLE, PTT_HOTKEY_DEFAULT, TRAY_HIDE_ID, TRAY_QUIT_ID, TRAY_SHOW_ID,
 };
 use ganesh_lib::commands::update::UpdateState;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::{
     image::Image, menu::{Menu, MenuItem}, tray::{MouseButton, TrayIconEvent}, Emitter, Manager, RunEvent, WindowEvent,
 };
@@ -51,6 +52,43 @@ fn spawn_and_store_sidecar(state: &SidecarState) -> Result<(), String> {
 #[tauri::command]
 fn get_sidecar_port(state: tauri::State<'_, SidecarState>) -> Option<u16> {
     state.port()
+}
+
+struct PttState {
+    hotkey: Mutex<String>,
+}
+
+#[tauri::command]
+fn set_ptt_hotkey(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, PttState>,
+    hotkey: String,
+) -> Result<String, String> {
+    let old = state.hotkey.lock().unwrap().clone();
+    if old == hotkey {
+        return Ok(hotkey);
+    }
+
+    let global = app.global_shortcut();
+    if let Err(e) = global.unregister(old.as_str()) {
+        eprintln!("failed to unregister old PTT hotkey '{old}': {e}");
+    }
+
+    let app_handle = app.clone();
+    global
+        .on_shortcut(hotkey.as_str(), move |app, _shortcut, _event| {
+            let _ = app.emit("ganesh:ptt-toggle", ());
+        })
+        .map_err(|e| format!("failed to register PTT hotkey '{hotkey}': {e}"))?;
+
+    *state.hotkey.lock().unwrap() = hotkey.clone();
+    let _ = app_handle.emit("ganesh:ptt-hotkey-changed", hotkey.clone());
+    Ok(hotkey)
+}
+
+#[tauri::command]
+fn get_ptt_hotkey(state: tauri::State<'_, PttState>) -> String {
+    state.hotkey.lock().unwrap().clone()
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -114,6 +152,7 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 fn build_app() -> tauri::Builder<tauri::Wry> {
     let state = SidecarState::new();
     let update_state = UpdateState::new();
+    let ptt_state = PttState { hotkey: Mutex::new(PTT_HOTKEY_DEFAULT.to_string()) };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -125,8 +164,11 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .manage(update_state)
+        .manage(ptt_state)
         .invoke_handler(tauri::generate_handler![
             get_sidecar_port,
+            get_ptt_hotkey,
+            set_ptt_hotkey,
             ganesh_lib::commands::update::check_update,
             ganesh_lib::commands::update::download_update,
             ganesh_lib::commands::update::install_update,
@@ -145,6 +187,12 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
             let global = app.global_shortcut();
             global.on_shortcut(HOTKEY_TOGGLE, move |app, _shortcut, _event| {
                 toggle_main_window(app);
+            })?;
+
+            let ptt_state = app.state::<PttState>();
+            let ptt_hotkey = ptt_state.hotkey.lock().unwrap().clone();
+            global.on_shortcut(ptt_hotkey.as_str(), move |app, _shortcut, _event| {
+                let _ = app.emit("ganesh:ptt-toggle", ());
             })?;
 
             let update_state = app.state::<UpdateState>();
