@@ -25,6 +25,7 @@ interface VoiceSettingsResponse {
   tts_cloud_available: boolean
   cuda_available: boolean
   activation_mode: 'click_to_talk' | 'push_to_talk' | 'vad'
+  input_device: string | null
 }
 
 interface VoiceSettingsProps {
@@ -106,6 +107,10 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [devices, setDevices] = useState<Array<{ id: string; name: string; backend: string }>>([])
+  const [inputDevice, setInputDevice] = useState<string>('')
+  const [testing, setTesting] = useState(false)
+  const [level, setLevel] = useState(0)
 
   const loadSettings = useCallback(async () => {
     try {
@@ -119,7 +124,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
       setDeepgramModel(data.deepgram_model)
       setElevenlabsVoiceId(data.elevenlabs_voice_id)
       setActivationMode(data.activation_mode)
-      setActivationMode(data.activation_mode)
+      setInputDevice(data.input_device ?? '')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -128,7 +133,79 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   useEffect(() => {
     void loadSettings()
     invoke<string>('get_ptt_hotkey').then(setPttHotkey).catch(() => {})
+    void fetchDevices()
   }, [loadSettings])
+
+  const fetchDevices = useCallback(async () => {
+    try {
+      const res = await sidecarFetch('/api/voice/devices')
+      if (res.ok) {
+        const data = (await res.json()) as { devices: Array<{ id: string; name: string; backend: string }> }
+        setDevices(data.devices)
+      }
+    } catch {
+    }
+  }, [])
+
+  const handleInputDeviceChange = async (value: string) => {
+    setInputDevice(value)
+    setError(null)
+    try {
+      const updated = await saveVoiceSettings({ input_device: value || null })
+      setSettings(updated)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const handleTestMicStart = async () => {
+    setError(null)
+    try {
+      const res = await sidecarFetch('/api/voice/test-mic/start', { method: 'POST' })
+      if (res.ok) {
+        setTesting(true)
+        setLevel(0)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const handleTestMicStop = async () => {
+    try {
+      await sidecarFetch('/api/voice/test-mic/stop', { method: 'POST' })
+    } catch {
+    }
+    setTesting(false)
+    setLevel(0)
+  }
+
+  useEffect(() => {
+    if (!testing) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await sidecarFetch('/api/voice/test-mic/level')
+        if (res.ok) {
+          const data = (await res.json()) as { level: number; active: boolean }
+          setLevel(data.level)
+          if (!data.active) {
+            setTesting(false)
+            setLevel(0)
+          }
+        }
+      } catch {
+      }
+    }, 100)
+    return () => clearInterval(interval)
+  }, [testing])
+
+  useEffect(() => {
+    return () => {
+      if (testing) {
+        void sidecarFetch('/api/voice/test-mic/stop', { method: 'POST' }).catch(() => {})
+      }
+    }
+  }, [testing])
 
   const handleSttEngineChange = async (engine: 'local' | 'cloud') => {
     setSttEngine(engine)
@@ -357,6 +434,106 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Microphone Section */}
+        <div>
+          <h3 className="mb-2 text-sm font-medium text-text-primary">Microphone</h3>
+          <div className="mb-3">
+            <label htmlFor="mic-device-select" className="mb-1 block text-sm font-medium text-text-primary">
+              Input Device
+            </label>
+            <select
+              id="mic-device-select"
+              value={inputDevice}
+              onChange={(e) => void handleInputDeviceChange(e.target.value)}
+              className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+              data-testid="mic-device-select"
+            >
+              <option value="">Default</option>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={testing ? handleTestMicStop : handleTestMicStart}
+              className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
+              data-testid="test-mic-button"
+            >
+              {testing ? 'Stop Test' : 'Test Microphone'}
+            </button>
+            {testing && (
+              <div className="mt-2">
+                <div className="w-full h-3 rounded bg-bg-tertiary overflow-hidden">
+                  <div
+                    className="h-full bg-status-success transition-all duration-75"
+                    style={{ width: `${level * 100}%` }}
+                  />
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <p className="text-xs text-text-muted">{Math.round(level * 100)}%</p>
+                  {level < 0.01 && (
+                    <p className="text-xs text-status-warning">No input detected</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Microphone Section */}
+        <div>
+          <h3 className="mb-2 text-sm font-medium text-text-primary">Microphone</h3>
+          <div className="mb-3">
+            <label htmlFor="mic-device-select" className="mb-1 block text-sm font-medium text-text-primary">
+              Input Device
+            </label>
+            <select
+              id="mic-device-select"
+              value={inputDevice}
+              onChange={(e) => void handleInputDeviceChange(e.target.value)}
+              className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+              data-testid="mic-device-select"
+            >
+              <option value="">Default</option>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={testing ? handleTestMicStop : handleTestMicStart}
+              className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
+              data-testid="test-mic-button"
+            >
+              {testing ? 'Stop Test' : 'Test Microphone'}
+            </button>
+            {testing && (
+              <div className="mt-2">
+                <div className="w-full h-3 rounded bg-bg-tertiary overflow-hidden">
+                  <div
+                    className="h-full bg-status-success transition-all duration-75"
+                    style={{ width: `${level * 100}%` }}
+                  />
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <p className="text-xs text-text-muted">{Math.round(level * 100)}%</p>
+                  {level < 0.01 && (
+                    <p className="text-xs text-status-warning">No input detected</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* STT Section */}
