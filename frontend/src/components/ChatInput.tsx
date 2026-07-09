@@ -22,8 +22,19 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [activationMode, setActivationMode] = useState<ActivationMode>('click_to_talk')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { isRecording, isTranscribing, transcript, error, start, stop } =
+  const { isRecording, isTranscribing, transcript, error, start, stop, resetTranscript } =
     useVoiceRecording()
+
+  useEffect(() => {
+    if (transcript) {
+      setText(transcript)
+      resetTranscript()
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto'
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`
+      }
+    }
+  }, [transcript, resetTranscript])
 
   useEffect(() => {
     sidecarFetch('/api/voice/settings')
@@ -54,16 +65,6 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     window.addEventListener('ganesh:ptt-toggle', handler)
     return () => window.removeEventListener('ganesh:ptt-toggle', handler)
   }, [isRecording, isTranscribing, start, stop])
-
-  useEffect(() => {
-    if (transcript) {
-      setText(transcript)
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto'
-        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`
-      }
-    }
-  }, [transcript])
 
   const handleFileSelect = useCallback((fileList: FileList) => {
     const files: AttachedFile[] = []

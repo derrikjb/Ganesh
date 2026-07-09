@@ -14,6 +14,7 @@ interface UseVoiceRecordingResult {
   error: string | null
   start: () => Promise<void>
   stop: () => Promise<void>
+  resetTranscript: () => void
 }
 
 export function useVoiceRecording(): UseVoiceRecordingResult {
@@ -55,7 +56,13 @@ export function useVoiceRecording(): UseVoiceRecordingResult {
         throw new Error(body.detail ?? `HTTP ${res.status}`)
       }
       const data = (await res.json()) as TranscribeResponse
-      if (mountedRef.current) setTranscript(data.text ?? '')
+      if (mountedRef.current) {
+        if (data.text && data.text.trim()) {
+          setTranscript(data.text)
+        } else {
+          setError('No speech detected in recording.')
+        }
+      }
     } catch (err) {
       if (mountedRef.current) {
         setError(err instanceof Error ? err.message : 'Transcription failed.')
@@ -65,5 +72,9 @@ export function useVoiceRecording(): UseVoiceRecordingResult {
     }
   }, [])
 
-  return { isRecording, isTranscribing, transcript, error, start, stop }
+  const resetTranscript = useCallback(() => {
+    setTranscript('')
+  }, [])
+
+  return { isRecording, isTranscribing, transcript, error, start, stop, resetTranscript }
 }
