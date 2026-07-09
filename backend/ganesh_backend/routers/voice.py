@@ -464,28 +464,45 @@ def _list_input_devices() -> list[dict[str, str]]:
     return devices
 
 
+import io
+import wave
+
+RECORD_RATE = 16000
+RECORD_CHANNELS = 1
+RECORD_SAMPLE_WIDTH = 2
+
+
+def _raw_to_wav(raw_path: str, wav_path: str) -> None:
+    with open(raw_path, "rb") as f:
+        pcm = f.read()
+    with wave.open(wav_path, "wb") as wav:
+        wav.setnchannels(RECORD_CHANNELS)
+        wav.setsampwidth(RECORD_SAMPLE_WIDTH)
+        wav.setframerate(RECORD_RATE)
+        wav.writeframes(pcm)
+
+
 def _build_record_cmd(path: str, raw: bool = False) -> list[str]:
     import shutil
 
     device = config_service.get_setting("voice.input_device")
 
     if shutil.which("parecord"):
-        cmd = ["parecord", "--format=s16le", "--rate=44100", "--channels=1"]
-        if raw:
-            cmd.append("--raw")
-        else:
-            cmd.append("--file-format=wav")
+        cmd = [
+            "parecord",
+            "--format=s16le",
+            f"--rate={RECORD_RATE}",
+            "--channels=1",
+            "--raw",
+            "--latency-msec=5",
+        ]
         if device:
             cmd.append(f"--device={device}")
         cmd.append(path)
         return cmd
 
     if shutil.which("arecord"):
-        cmd = ["arecord", "-q", "-r", "44100", "-c", "1"]
-        if raw:
-            cmd += ["-t", "raw", "-f", "S16_LE"]
-        else:
-            cmd += ["-t", "wav", "-f", "cd"]
+        cmd = ["arecord", "-q", "-t", "raw", "-f", "S16_LE", "-r", str(RECORD_RATE), "-c", "1"]
         if device:
             cmd += ["-D", device]
         cmd.append(path)
@@ -546,7 +563,7 @@ async def start_mic_test() -> Any:
             try:
                 chunk = os.read(fd, 2048)
             except BlockingIOError:
-                time.sleep(0.01)
+                time.sleep(0.002)
                 continue
             if not chunk or len(chunk) < 2:
                 continue
@@ -588,7 +605,7 @@ async def start_recording() -> Any:
     if _recording_proc is not None and _recording_proc.poll() is None:
         raise HTTPException(status_code=409, detail="Recording already in progress")
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pcm")
     _recording_path = tmp.name
     tmp.close()
 
@@ -628,14 +645,25 @@ async def stop_recording() -> Any:
     if not path or not os.path.exists(path):
         raise HTTPException(status_code=500, detail="Recording file not found")
 
+    wav_path = path.rsplit(".", 1)[0] + ".wav"
+    try:
+        _raw_to_wav(path, wav_path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to convert recording: {exc}") from exc
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
     language = config_service.get_setting("voice.stt_language")
     try:
-        result = await stt_service.transcribe_async(path, language=language)
+        result = await stt_service.transcribe_async(wav_path, language=language)
     except stt_service.STTError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         try:
-            os.unlink(path)
+            os.unlink(wav_path)
         except OSError:
             pass
 
