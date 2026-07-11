@@ -16,9 +16,6 @@ import { sidecarFetch } from '../api'
 
 const mockFetch = sidecarFetch as ReturnType<typeof vi.fn>
 
-// Test fixture ports — kept as numeric constants so the CI port-scan regex
-// `(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}` does not match literal ports.
-// These are mock values for user-configurable local LLM endpoints in tests.
 const TEST_LOCAL_PORT = 1234
 const OLLAMA_PORT = 11434
 const localUrl = (p: number): string => `http://localhost:${p}/v1`
@@ -45,6 +42,44 @@ const PROVIDERS = [
 const OPENAI_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo']
 const ANTHROPIC_MODELS = ['claude-3-5-sonnet-20240620', 'claude-3-5-haiku-20241022']
 
+function setupMockFetch(options: {
+  config?: object
+  models?: Record<string, string[]>
+  testOk?: boolean
+} = {}): void {
+  const config = options.config ?? { llm: { provider: 'openai', model: 'gpt-4o-mini' } }
+  const models = options.models ?? { openai: OPENAI_MODELS, anthropic: ANTHROPIC_MODELS, local: [] }
+  const testOk = options.testOk ?? true
+
+  mockFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    if (url === '/api/config' && method === 'GET') {
+      return mockResponse(config)
+    }
+    if (url === '/api/config' && method === 'PUT') {
+      return mockResponse({ status: 'ok' })
+    }
+    if (url === '/api/config/providers' && method === 'GET') {
+      return mockResponse({ providers: PROVIDERS })
+    }
+    if (url?.startsWith('/api/config/providers/') && url.endsWith('/models')) {
+      const parts = url.split('/')
+      const provider = parts[4]
+      return mockResponse({ models: models[provider] ?? [] })
+    }
+    if (url?.startsWith('/api/config/providers/') && url.endsWith('/key')) {
+      return mockResponse({ status: 'ok' })
+    }
+    if (url === '/api/config/providers/local/endpoint') {
+      return mockResponse({ status: 'ok' })
+    }
+    if (url?.startsWith('/api/config/providers/') && url.endsWith('/test')) {
+      return mockResponse({ ok: testOk })
+    }
+    return mockResponse({})
+  })
+}
+
 describe('ProviderSettings', () => {
   beforeEach(() => {
     mockFetch.mockReset()
@@ -56,10 +91,7 @@ describe('ProviderSettings', () => {
   })
 
   it('renders provider and model dropdowns', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-
+    setupMockFetch()
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -72,11 +104,7 @@ describe('ProviderSettings', () => {
   })
 
   it('loads models when provider changes', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-      .mockResolvedValueOnce(mockResponse({ models: ANTHROPIC_MODELS }))
-
+    setupMockFetch()
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -94,10 +122,7 @@ describe('ProviderSettings', () => {
   })
 
   it('toggles API key visibility', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-
+    setupMockFetch()
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -115,12 +140,7 @@ describe('ProviderSettings', () => {
   })
 
   it('saves API key on Save click', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-
+    setupMockFetch()
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -145,13 +165,7 @@ describe('ProviderSettings', () => {
   })
 
   it('tests connection and shows success result', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ ok: true }))
-
+    setupMockFetch({ testOk: true })
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -171,13 +185,7 @@ describe('ProviderSettings', () => {
   })
 
   it('shows failure result when connection test fails', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ ok: false }))
-
+    setupMockFetch({ testOk: false })
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -196,11 +204,10 @@ describe('ProviderSettings', () => {
     })
   })
 
-  it('disables Save and Test buttons when no API key entered', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-
+  it('disables Save and Test buttons when no API key entered and not configured', async () => {
+    setupMockFetch({
+      config: { llm: { provider: 'anthropic', model: 'claude-3-5-sonnet-20240620' } },
+    })
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -212,10 +219,9 @@ describe('ProviderSettings', () => {
   })
 
   it('shows base URL and model inputs for local provider', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-
+    setupMockFetch({
+      config: { llm: { provider: 'local', local: { base_url: localUrl(OLLAMA_PORT), model: 'llama3' } } },
+    })
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -229,17 +235,13 @@ describe('ProviderSettings', () => {
       expect(screen.getByTestId('local-base-url-input')).toBeInTheDocument()
     })
     expect(screen.getByTestId('local-model-input')).toBeInTheDocument()
-    // No API key input for local.
     expect(screen.queryByTestId('api-key-input')).not.toBeInTheDocument()
   })
 
   it('saves local endpoint config on Save click', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-
+    setupMockFetch({
+      config: { llm: { provider: 'local', local: { base_url: localUrl(OLLAMA_PORT), model: 'llama3' } } },
+    })
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -273,15 +275,10 @@ describe('ProviderSettings', () => {
   })
 
   it('tests local connection and shows success result', async () => {
-    mockFetch
-      .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
-      .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ models: [] }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
-      .mockResolvedValueOnce(mockResponse({ ok: true }))
-
+    setupMockFetch({
+      config: { llm: { provider: 'local', local: { base_url: localUrl(OLLAMA_PORT), model: 'llama3' } } },
+      testOk: true,
+    })
     render(<ProviderSettings />)
 
     await waitFor(() => {
@@ -304,6 +301,35 @@ describe('ProviderSettings', () => {
     await waitFor(() => {
       const result = screen.getByTestId('provider-test-result')
       expect(result).toHaveTextContent('successful')
+    })
+  })
+
+  it('shows key saved indicator for configured provider', async () => {
+    setupMockFetch({
+      config: { llm: { provider: 'openai', model: 'gpt-4o-mini' } },
+    })
+    render(<ProviderSettings />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('key-saved-indicator')).toBeInTheDocument()
+    })
+  })
+
+  it('loads saved provider and model from config on mount', async () => {
+    setupMockFetch({
+      config: { llm: { provider: 'openrouter', model: 'openrouter/openai/gpt-4o-mini' } },
+      models: { openrouter: ['openrouter/openai/gpt-4o-mini', 'openrouter/anthropic/claude-3.5-sonnet'] },
+    })
+    render(<ProviderSettings />)
+
+    await waitFor(() => {
+      const select = screen.getByTestId('provider-select') as HTMLSelectElement
+      expect(select.value).toBe('openrouter')
+    })
+
+    await waitFor(() => {
+      const modelSelect = screen.getByTestId('model-select') as HTMLSelectElement
+      expect(modelSelect.value).toBe('openrouter/openai/gpt-4o-mini')
     })
   })
 })

@@ -225,7 +225,9 @@ def chat_completion(
             "llm.local.model", ""
         ) or "local-model"
     else:
-        chosen_model = model or PROVIDER_MODELS[provider][0]
+        chosen_model = model or config_service.get_setting(
+            "llm.model", ""
+        ) or PROVIDER_MODELS[provider][0]
     litellm_model = _litellm_model_name(provider, chosen_model)
     api_key = get_api_key(provider)
 

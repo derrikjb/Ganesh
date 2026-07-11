@@ -286,7 +286,7 @@ def test_chat_router_accepts_provider():
 
 
 def test_chat_router_defaults_to_openai():
-    """Chat router defaults to openai provider when not specified."""
+    """Chat router defaults to configured provider when not specified."""
     mock_response = _make_response("default-resp", "gpt-4o-mini")
     with patch(
         "ganesh_backend.services.llm.litellm.completion",
@@ -294,6 +294,12 @@ def test_chat_router_defaults_to_openai():
     ) as mock_completion, patch(
         "ganesh_backend.services.llm.get_api_key",
         return_value="openai-key",
+    ), patch(
+        "ganesh_backend.routers.chat.config_service.get_setting",
+        side_effect=lambda key, default=None: {
+            "llm.provider": "openai",
+            "llm.model": "gpt-4o-mini",
+        }.get(key, default),
     ):
         client = TestClient(main_module.create_app())
         with client:

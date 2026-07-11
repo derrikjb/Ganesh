@@ -69,6 +69,18 @@ async function setConfig(key: string, value: unknown): Promise<void> {
   if (!res.ok) throw new Error(`Failed to save config: ${res.status}`)
 }
 
+async function fetchConfig(): Promise<{
+  llm: {
+    provider?: string
+    model?: string
+    local?: { base_url?: string; model?: string }
+  }
+}> {
+  const res = await sidecarFetch('/api/config')
+  if (!res.ok) throw new Error(`Failed to load config: ${res.status}`)
+  return await res.json() as { llm: { provider?: string; model?: string; local?: { base_url?: string; model?: string } } }
+}
+
 async function testProviderConnection(provider: ProviderName): Promise<boolean> {
   const res = await sidecarFetch(`/api/config/providers/${provider}/test`, {
     method: 'POST',
@@ -91,6 +103,8 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   const [testResult, setTestResult] = useState<null | boolean>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [keySaved, setKeySaved] = useState(false)
+  const [configLoaded, setConfigLoaded] = useState(false)
 
   const [localModels, setLocalModels] = useState<string[]>([])
   const [localModelLoading, setLocalModelLoading] = useState(false)
@@ -110,11 +124,42 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
     try {
       const list = await fetchModels(provider)
       setModels(list ?? [])
-      if (list && list.length > 0) setSelectedModel(list[0])
-      else setSelectedModel('')
+      if (list && list.length > 0) {
+        setSelectedModel((prev) => {
+          if (prev && list.includes(prev)) return prev
+          return list[0]
+        })
+      } else {
+        setSelectedModel('')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const cfg = await fetchConfig()
+        const llm = cfg.llm ?? {}
+        if (llm.provider) {
+          const provider = llm.provider as ProviderName
+          setSelectedProvider(provider)
+          const list = await fetchProviders()
+          const found = list.find((p) => p.name === provider)
+          setKeySaved(found?.configured ?? false)
+          if (provider === 'local') {
+            if (llm.local?.base_url) setLocalBaseUrl(llm.local.base_url)
+            if (llm.local?.model) setLocalModel(llm.local.model)
+          } else {
+            if (llm.model) setSelectedModel(llm.model)
+          }
+        }
+      } catch {
+      } finally {
+        setConfigLoaded(true)
+      }
+    })()
   }, [])
 
   const refreshLocalModels = useCallback(async () => {
@@ -141,6 +186,7 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   }, [loadProviders])
 
   useEffect(() => {
+    if (!configLoaded) return
     if (!isLocal) {
       void loadModels(selectedProvider)
     } else {
@@ -148,13 +194,15 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
       setSelectedModel(localModel)
       void refreshLocalModels()
     }
-  }, [selectedProvider, loadModels, isLocal, localModel, refreshLocalModels])
+  }, [selectedProvider, loadModels, isLocal, localModel, refreshLocalModels, configLoaded])
 
   const handleProviderChange = (provider: string) => {
     setSelectedProvider(provider as ProviderName)
     setApiKey('')
     setTestResult(null)
     setError(null)
+    const found = providers.find((p) => p.name === provider)
+    setKeySaved(found?.configured ?? false)
   }
 
   const handleTest = async () => {
@@ -165,14 +213,19 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
       if (isLocal) {
         await saveLocalEndpoint(localBaseUrl, localModel)
       } else {
-        if (!apiKey) {
+        if (!apiKey && !keySaved) {
           setError('Enter an API key before testing.')
           setTesting(false)
           return
         }
-        await saveProviderKey(selectedProvider, apiKey)
+        if (apiKey) {
+          await saveProviderKey(selectedProvider, apiKey)
+        }
       }
       await setConfig('llm.provider', selectedProvider)
+      if (!isLocal && selectedModel) {
+        await setConfig('llm.model', selectedModel)
+      }
       const ok = await testProviderConnection(selectedProvider)
       setTestResult(ok)
     } catch (e) {
@@ -184,7 +237,7 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   }
 
   const handleSave = async () => {
-    if (!isLocal && !apiKey) {
+    if (!isLocal && !apiKey && !keySaved) {
       setError('Enter an API key before saving.')
       return
     }
@@ -194,11 +247,19 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
       if (isLocal) {
         await saveLocalEndpoint(localBaseUrl, localModel)
       } else {
-        await saveProviderKey(selectedProvider, apiKey)
+        if (apiKey) {
+          await saveProviderKey(selectedProvider, apiKey)
+        }
       }
       await setConfig('llm.provider', selectedProvider)
+      if (!isLocal && selectedModel) {
+        await setConfig('llm.model', selectedModel)
+      }
       await loadProviders()
-      if (!isLocal) setApiKey('')
+      if (!isLocal) {
+        setApiKey('')
+        setKeySaved(true)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -206,7 +267,9 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
     }
   }
 
-  const canSaveOrTest = isLocal ? localBaseUrl.trim().length > 0 : apiKey.length > 0
+  const canSaveOrTest = isLocal
+    ? localBaseUrl.trim().length > 0
+    : apiKey.length > 0 || keySaved
 
   return (
     <div
@@ -363,6 +426,11 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
                 className="mb-1 block text-sm font-medium text-text-primary"
               >
                 API Key
+                {keySaved && (
+                  <span className="ml-2 text-xs text-green-500" data-testid="key-saved-indicator">
+                    Key saved
+                  </span>
+                )}
               </label>
               <div className="flex gap-2">
                 <input
@@ -370,7 +438,7 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
                   type={showKey ? 'text' : 'password'}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Enter API key"
+                  placeholder={keySaved ? '•••••••• (enter new key to replace)' : 'Enter API key'}
                   className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
                   data-testid="api-key-input"
                 />
