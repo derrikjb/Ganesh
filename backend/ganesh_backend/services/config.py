@@ -61,6 +61,17 @@ DEFAULT_CONFIG = {
         "channel": "stable",       # stable | beta
         "auto_check": True,        # check for updates on launch
     },
+    "conversation_memory": {
+        "enabled": True,                        # master toggle for checkpoint system
+        "checkpoint_gap_seconds": 300,          # gap that triggers a checkpoint (5 min)
+        "min_messages_for_checkpoint": 2,        # don't checkpoint segments with fewer messages
+        "max_summaries_injected": 3,            # top-k conversation summaries injected for cross-day
+        "full_pull_threshold": 0.85,            # similarity score above which full transcript is pulled
+        "max_transcript_messages": 50,          # cap on messages pulled per transcript pull
+        "adjacent_segments": 1,                 # how many adjacent checkpoint segments to pull (cK-1, cK+1)
+        "summary_provider": None,              # None = use same provider as chat; or "openai" etc
+        "summary_model": None,                  # None = use default model for provider
+    },
 }
 
 CONFIG_DIR = Path.home() / ".ganesh"

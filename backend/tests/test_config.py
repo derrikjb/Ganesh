@@ -103,3 +103,29 @@ def test_update_config_in_safe_config(temp_config_dir):
     assert "update" in safe
     assert safe["update"]["channel"] == "stable"
     assert safe["update"]["auto_check"] is True
+
+def test_conversation_memory_defaults(temp_config_dir):
+    service = ConfigService()
+    assert service.get_setting("conversation_memory.enabled") is True
+    assert service.get_setting("conversation_memory.checkpoint_gap_seconds") == 300
+    assert service.get_setting("conversation_memory.min_messages_for_checkpoint") == 2
+    assert service.get_setting("conversation_memory.max_summaries_injected") == 3
+    assert service.get_setting("conversation_memory.full_pull_threshold") == 0.85
+    assert service.get_setting("conversation_memory.max_transcript_messages") == 50
+    assert service.get_setting("conversation_memory.adjacent_segments") == 1
+    assert service.get_setting("conversation_memory.summary_provider") is None
+    assert service.get_setting("conversation_memory.summary_model") is None
+
+def test_conversation_memory_override(temp_config_dir):
+    override = {
+        "conversation_memory": {
+            "enabled": False,
+            "checkpoint_gap_seconds": 600
+        }
+    }
+    (temp_config_dir / "config.json").write_text(json.dumps(override))
+    service = ConfigService()
+    assert service.get_setting("conversation_memory.enabled") is False
+    assert service.get_setting("conversation_memory.checkpoint_gap_seconds") == 600
+    # Other defaults should remain
+    assert service.get_setting("conversation_memory.min_messages_for_checkpoint") == 2
