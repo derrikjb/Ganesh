@@ -7,6 +7,7 @@ import { ThinkingIndicator } from './ThinkingIndicator'
 import { useNaturalPacing } from '../hooks/useNaturalPacing'
 import type { PatternSuggestionData } from './PatternSuggestion'
 import { useChat } from '../hooks/useChat'
+import { useTTS } from '../hooks/useTTS'
 import { useAccessibility } from '../contexts/AccessibilityContext'
 import { useVisualizerState } from '../contexts/VisualizerStateContext'
 import { sidecarFetch } from '../api'
@@ -71,6 +72,7 @@ function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
 
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const { messages, isStreaming, streamingContent, error, sendMessage, retryLast, loadConversation, clearMessages } = useChat()
+  const { speak, stop: stopSpeaking, isSpeaking } = useTTS()
   const { textOnlyMode, naturalPacingEnabled, naturalPacingSpeed } = useAccessibility()
   const { setState: setVisualizerState } = useVisualizerState()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -78,6 +80,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [patternSuggestion, setPatternSuggestion] = useState<PatternSuggestionData | null>(null)
   const wasStreamingRef = useRef(false)
+  const lastSpokenRef = useRef<string | null>(null)
 
   const { pacedContent, isThinking, isPacing } = useNaturalPacing(streamingContent, isStreaming, {
     config: { enabled: naturalPacingEnabled, speedMultiplier: naturalPacingSpeed },
@@ -157,6 +160,19 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
       void fetchSuggestion(lastUser.content)
     }
   }, [messages, isStreaming, fetchSuggestion])
+
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1]
+    if (
+      lastMsg?.role === 'assistant' &&
+      lastMsg.status === 'done' &&
+      lastMsg.content &&
+      lastSpokenRef.current !== lastMsg.id
+    ) {
+      lastSpokenRef.current = lastMsg.id
+      void speak(lastMsg.content)
+    }
+  }, [messages, speak])
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current
@@ -259,6 +275,16 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
         <ThinkingIndicator visible={isStreaming} />
         <ChatInput onSend={sendMessage} disabled={isStreaming} />
         {showScrollButton && <ScrollToBottomButton onClick={scrollToBottom} />}
+        {isSpeaking && (
+          <button
+            type="button"
+            onClick={stopSpeaking}
+            className="absolute right-4 top-1/2 -translate-y-1/2 rounded border border-border-primary bg-bg-elevated px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors"
+            data-testid="stop-tts-button"
+          >
+            Stop speaking
+          </button>
+        )}
       </div>
     </div>
   )

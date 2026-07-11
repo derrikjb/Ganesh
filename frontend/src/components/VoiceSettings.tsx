@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { sidecarFetch } from '../api'
+import { useTTS } from '../hooks/useTTS'
 
 interface PiperVoice {
   id: string
@@ -88,6 +89,7 @@ async function saveApiKey(provider: string, apiKey: string): Promise<void> {
 }
 
 export function VoiceSettings({ onClose }: VoiceSettingsProps) {
+  const { ttsEnabled, setTtsEnabled, volume, setVolume, testChime, isSpeaking, outputDevices, outputDeviceId, setOutputDeviceId } = useTTS()
   const [settings, setSettings] = useState<VoiceSettingsResponse | null>(null)
   const [activationMode, setActivationMode] = useState<'click_to_talk' | 'push_to_talk' | 'vad'>('click_to_talk')
   const [pttHotkey, setPttHotkey] = useState('Control+Space')
@@ -967,6 +969,164 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                 {saving ? 'Saving…' : 'Save Voice ID'}
               </button>
             </>
+          )}
+        </div>
+
+        <div className="mt-4 border-t border-border-primary pt-4">
+          <h4 className="mb-3 text-sm font-medium text-text-primary">TTS Output</h4>
+
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium text-text-primary">
+              Text-to-Speech
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTtsEnabled(!ttsEnabled)}
+                className={`rounded border px-3 py-1.5 text-sm ${
+                  ttsEnabled
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border-primary text-text-muted'
+                }`}
+                data-testid="tts-toggle"
+              >
+                {ttsEnabled ? 'Enabled' : 'Disabled'}
+              </button>
+              <span className="text-xs text-text-muted">
+                Automatically speak assistant responses
+              </span>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium text-text-primary">
+              Volume
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                className="flex-1"
+                data-testid="tts-volume-slider"
+              />
+              <span className="w-12 text-sm text-text-muted">
+                {Math.round(volume * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={testChime}
+                disabled={isSpeaking}
+                className="rounded border border-border-primary px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary disabled:opacity-50"
+                data-testid="tts-test-chime"
+              >
+                🔔
+              </button>
+            </div>
+          </div>
+
+          {outputDevices.length > 0 && (
+            <div className="mb-4">
+              <label className="mb-1 block text-sm font-medium text-text-primary" htmlFor="output-device-select">
+                Output Device
+              </label>
+              <select
+                id="output-device-select"
+                value={outputDeviceId ?? ''}
+                onChange={(e) => setOutputDeviceId(e.target.value || null)}
+                className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                data-testid="output-device-select"
+              >
+                <option value="">Default</option>
+                {outputDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Device ${d.deviceId.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 border-t border-border-primary pt-4">
+          <h4 className="mb-3 text-sm font-medium text-text-primary">TTS Output</h4>
+
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium text-text-primary">
+              Text-to-Speech
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTtsEnabled(!ttsEnabled)}
+                className={`rounded border px-3 py-1.5 text-sm ${
+                  ttsEnabled
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border-primary text-text-muted'
+                }`}
+                data-testid="tts-toggle"
+              >
+                {ttsEnabled ? 'Enabled' : 'Disabled'}
+              </button>
+              <span className="text-xs text-text-muted">
+                Automatically speak assistant responses
+              </span>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium text-text-primary">
+              Volume
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={volume}
+                onChange={(e) => setVolume(Number(e.target.value))}
+                className="flex-1"
+                data-testid="tts-volume-slider"
+              />
+              <span className="w-12 text-sm text-text-muted">
+                {Math.round(volume * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={testChime}
+                disabled={isSpeaking}
+                className="rounded border border-border-primary px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary disabled:opacity-50"
+                data-testid="tts-test-chime"
+              >
+                🔔
+              </button>
+            </div>
+          </div>
+
+          {outputDevices.length > 0 && (
+            <div className="mb-4">
+              <label className="mb-1 block text-sm font-medium text-text-primary" htmlFor="output-device-select">
+                Output Device
+              </label>
+              <select
+                id="output-device-select"
+                value={outputDeviceId ?? ''}
+                onChange={(e) => setOutputDeviceId(e.target.value || null)}
+                className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                data-testid="output-device-select"
+              >
+                <option value="">Default</option>
+                {outputDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Device ${d.deviceId.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
 
