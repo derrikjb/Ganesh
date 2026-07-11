@@ -48,6 +48,9 @@ export interface ChatResponse {
 
 export interface UseTTSReturn {
   speak: (text: string) => Promise<void>
+  speakStreaming: (text: string, isFinal: boolean) => Promise<void>
+  flushStream: () => Promise<void>
+  resetStream: () => void
   stop: () => void
   isSpeaking: boolean
   volume: number

@@ -26,7 +26,13 @@ os.chdir(BACKEND_DIR)
 import main as main_module  # noqa: E402
 from ganesh_backend.services import stt as stt_service  # noqa: E402
 from ganesh_backend.services.config import config_service  # noqa: E402
-from ganesh_backend.services.tts import TTSError, TTSService, reset_tts_service  # noqa: E402
+from ganesh_backend.services.tts import (  # noqa: E402
+    DEFAULT_KOKORO_VOICE,
+    TTSError,
+    TTSService,
+    reset_tts_service,
+    strip_markdown,
+)
 
 KOKORO_VOICE_NAMES = ["af_heart", "af_bella", "am_adam"]
 
@@ -34,8 +40,10 @@ KOKORO_VOICE_NAMES = ["af_heart", "af_bella", "am_adam"]
 @pytest.fixture(autouse=True)
 def _reset_tts_singleton():
     reset_tts_service()
+    config_service.set_setting("voice.tts_voice_name", DEFAULT_KOKORO_VOICE)
     yield
     reset_tts_service()
+    config_service.set_setting("voice.tts_voice_name", DEFAULT_KOKORO_VOICE)
 
 
 def _make_fake_soundfile() -> types.ModuleType:
@@ -258,3 +266,38 @@ def test_kokoro_model_missing():
          patch("os.path.isfile", return_value=False):
         with pytest.raises(TTSError):
             service_no_cloud.synthesize("hello")
+
+
+def test_strip_markdown_utility():
+    assert strip_markdown("# Header") == "Header"
+    assert strip_markdown("**bold** and _italic_") == "bold and italic"
+    assert strip_markdown("`code` and ```block\ncontent\n```") == "code and block\ncontent"
+    assert strip_markdown("[link](http://ex.com)") == "link"
+    assert strip_markdown("![img](http://ex.com/i.png)") == "img"
+    assert strip_markdown("- item 1\n* item 2\n1. item 3") == "item 1\nitem 2\nitem 3"
+    assert strip_markdown("> quote") == "quote"
+    assert strip_markdown("~~strike~~") == "strike"
+    assert strip_markdown("---\n***\n___") == ""
+    assert strip_markdown("| a | b |\n|---|---|\n| c | d |") == "a   b\nc   d"
+    assert strip_markdown("<div>html</div>") == "html"
+
+
+def test_synthesize_strips_markdown():
+    service = _make_service_with_local()
+    mock_kokoro = _make_mock_kokoro()
+
+    with patch.object(TTSService, "_kokoro_importable", return_value=True), \
+         patch("os.path.isfile", return_value=True), \
+         patch.object(service, "_load_kokoro", return_value=mock_kokoro), \
+         patch.dict(sys.modules, {"soundfile": _make_fake_soundfile()}):
+        service.synthesize("**bold** text")
+
+    mock_kokoro.create.assert_called_once_with(
+        "bold text", voice="af_heart", speed=1.0, lang="en-us"
+    )
+
+
+def test_synthesize_markdown_only_raises_error():
+    service = _make_service_with_local()
+    with pytest.raises(ValueError, match="non-empty"):
+        service.synthesize("***")

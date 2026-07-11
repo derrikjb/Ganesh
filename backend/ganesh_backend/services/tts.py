@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 import wave
 from pathlib import Path
 from typing import Any, Optional
@@ -37,6 +38,42 @@ ELEVENLABS_KEYRING_KEY: str = "elevenlabs_api_key"
 
 LOCAL_AUDIO_FORMAT: str = "wav"
 CLOUD_AUDIO_FORMAT: str = "mp3"
+
+
+def strip_markdown(text: str) -> str:
+    """Remove markdown formatting from text for speech synthesis."""
+    text = re.sub(r"<[^>]*>", "", text)
+    text = re.sub(r"!\[(.*?)\]\(.*?\)", r"\1", text)
+    text = re.sub(r"\[(.*?)\]\(.*?\)", r"\1", text)
+    text = re.sub(r"```+(.*?)```+", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"`(.*?)`", r"\1", text)
+
+    lines = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            lines.append("")
+            continue
+
+        if re.match(r"^([-*_]){3,}$", line):
+            continue
+
+        line = re.sub(r"^#+\s+", "", line)
+        line = re.sub(r"^([-*+]\s+|\d+\.\s+)", "", line)
+        line = re.sub(r"^>\s+", "", line)
+
+        if "|" in line:
+            if re.match(r"^\|?[:\s-]*(\|[:\s-]*)*\|?$", line):
+                continue
+            line = line.replace("|", " ").strip()
+
+        lines.append(line)
+
+    text = "\n".join(lines)
+    text = re.sub(r"(\*\*|__|~~)(.*?)\1", r"\2", text)
+    text = re.sub(r"(\*|_)(.*?)\1", r"\2", text)
+    text = re.sub(r"\n\s*\n", "\n\n", text)
+    return text.strip()
 
 
 class TTSError(RuntimeError):
@@ -107,6 +144,7 @@ class TTSService:
         Engine order is controlled by ``voice.tts_engine`` config:
         ``"local"`` (default) tries local first; ``"cloud"`` tries cloud first.
         """
+        text = strip_markdown(text)
         if not text or not text.strip():
             raise ValueError("text must be a non-empty string")
 

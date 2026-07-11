@@ -11,7 +11,7 @@ import { useTTS } from '../hooks/useTTS'
 import { useAccessibility } from '../contexts/AccessibilityContext'
 import { useVisualizerState } from '../contexts/VisualizerStateContext'
 import { sidecarFetch } from '../api'
-import type { ChatMessage as ChatMessageType } from '../types/chat'
+import type { ChatMessage as ChatMessageType, AttachedFile } from '../types/chat'
 import type { OpenDocument } from '../types/documents'
 
 interface ChatContainerProps {
@@ -72,7 +72,7 @@ function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
 
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const { messages, isStreaming, streamingContent, error, sendMessage, retryLast, loadConversation, clearMessages } = useChat()
-  const { speak, stop: stopSpeaking, isSpeaking } = useTTS()
+  const { speakStreaming, flushStream, resetStream, stop: stopSpeaking, isSpeaking, ttsEnabled } = useTTS()
   const { textOnlyMode, naturalPacingEnabled, naturalPacingSpeed } = useAccessibility()
   const { setState: setVisualizerState } = useVisualizerState()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -80,7 +80,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [patternSuggestion, setPatternSuggestion] = useState<PatternSuggestionData | null>(null)
   const wasStreamingRef = useRef(false)
-  const lastSpokenRef = useRef<string | null>(null)
+  const lastFedLengthRef = useRef(0)
 
   const { pacedContent, isThinking, isPacing } = useNaturalPacing(streamingContent, isStreaming, {
     config: { enabled: naturalPacingEnabled, speedMultiplier: naturalPacingSpeed },
@@ -136,17 +136,23 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
         id: string
         messages: Array<{ role: string; content: string }>
       }
+      resetStream()
+      lastFedLengthRef.current = 0
       loadConversation(detail)
     }
     window.addEventListener('ganesh:load-conversation', handler)
     return () => window.removeEventListener('ganesh:load-conversation', handler)
-  }, [loadConversation])
+  }, [loadConversation, resetStream])
 
   useEffect(() => {
-    const handler = () => clearMessages()
+    const handler = () => {
+      resetStream()
+      lastFedLengthRef.current = 0
+      clearMessages()
+    }
     window.addEventListener('ganesh:conversation-deleted', handler)
     return () => window.removeEventListener('ganesh:conversation-deleted', handler)
-  }, [clearMessages])
+  }, [clearMessages, resetStream])
 
   useEffect(() => {
     if (messagesEndRef.current && !showScrollButton) {
@@ -162,17 +168,26 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   }, [messages, isStreaming, fetchSuggestion])
 
   useEffect(() => {
-    const lastMsg = messages[messages.length - 1]
-    if (
-      lastMsg?.role === 'assistant' &&
-      lastMsg.status === 'done' &&
-      lastMsg.content &&
-      lastSpokenRef.current !== lastMsg.id
-    ) {
-      lastSpokenRef.current = lastMsg.id
-      void speak(lastMsg.content)
+    if (!ttsEnabled || !isStreaming) return
+    if (streamingContent.length > lastFedLengthRef.current) {
+      void speakStreaming(streamingContent, false)
+      lastFedLengthRef.current = streamingContent.length
     }
-  }, [messages, speak])
+  }, [streamingContent, isStreaming, ttsEnabled, speakStreaming])
+
+  useEffect(() => {
+    if (!isStreaming && wasStreamingRef.current) {
+      if (lastFedLengthRef.current > 0) {
+        const lastMsg = messages[messages.length - 1]
+        if (lastMsg?.role === 'assistant' && lastMsg.content) {
+          void speakStreaming(lastMsg.content, true)
+        } else {
+          void flushStream()
+        }
+      }
+      lastFedLengthRef.current = 0
+    }
+  }, [isStreaming, messages, speakStreaming, flushStream])
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current
@@ -185,6 +200,15 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     setShowScrollButton(false)
   }, [])
+
+  const handleSend = useCallback(
+    (text: string, files?: AttachedFile[]) => {
+      resetStream()
+      lastFedLengthRef.current = 0
+      void sendMessage(text, files)
+    },
+    [sendMessage, resetStream],
+  )
 
   const displayMessages: ChatMessageType[] = messages.map((m) => {
     if (m.role === 'assistant' && m.id === messages[messages.length - 1]?.id && isStreaming) {
@@ -273,7 +297,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
 
       <div className="relative px-4 py-3 border-t border-border bg-bg-primary">
         <ThinkingIndicator visible={isStreaming} />
-        <ChatInput onSend={sendMessage} disabled={isStreaming} />
+        <ChatInput onSend={handleSend} disabled={isStreaming} />
         {showScrollButton && <ScrollToBottomButton onClick={scrollToBottom} />}
         {isSpeaking && (
           <button

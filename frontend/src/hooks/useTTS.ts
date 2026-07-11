@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { sidecarFetch } from '../api'
+import { stripMarkdown } from '../utils/markdown'
 import type { UseTTSReturn } from '../types/chat'
 
 export type { UseTTSReturn } from '../types/chat'
@@ -8,10 +9,6 @@ const TTS_ENABLED_KEY = 'ganesh_tts_enabled'
 const TTS_VOLUME_KEY = 'ganesh_tts_volume'
 const TTS_OUTPUT_DEVICE_KEY = 'ganesh_tts_output_device'
 
-/**
- * Apply an audio output device to an HTMLAudioElement via setSinkId.
- * Wrapped in try/catch since not all browsers support this API.
- */
 async function applySinkId(audio: HTMLAudioElement, sinkId: string): Promise<void> {
   if (!('setSinkId' in audio)) return
   try {
@@ -21,6 +18,32 @@ async function applySinkId(audio: HTMLAudioElement, sinkId: string): Promise<voi
   } catch {
     // setSinkId not supported or failed — non-critical
   }
+}
+
+/**
+ * Find the index of the last natural breakpoint in `text` at or before `end`.
+ * Breakpoints: paragraph boundary (\n\n), list item boundary (\n- \n* \n1.),
+ * or sentence boundary (. ! ? followed by space/newline).
+ * Returns -1 if no breakpoint is found.
+ */
+function findBreakpoint(text: string, end: number): number {
+  const slice = text.slice(0, end)
+  const patterns = [
+    /\n\n/,
+    /\n[-*+]\s/,
+    /\n\d+\.\s/,
+    /[.!?]\s/,
+    /[.!?]$/,
+  ]
+  let last = -1
+  for (const p of patterns) {
+    const m = slice.match(p)
+    if (m && m.index !== undefined) {
+      const pos = m.index + m[0].length
+      if (pos > last) last = pos
+    }
+  }
+  return last
 }
 
 export function useTTS(): UseTTSReturn {
@@ -43,6 +66,11 @@ export function useTTS(): UseTTSReturn {
   )
   const ttsEnabledRef = useRef(ttsEnabled)
 
+  const streamTextRef = useRef('')
+  const streamSynthesizedRef = useRef(0)
+  const playbackQueueRef = useRef<Blob[]>([])
+  const isPlayingQueueRef = useRef(false)
+
   useEffect(() => {
     if (!navigator.mediaDevices?.enumerateDevices) return
     navigator.mediaDevices
@@ -54,42 +82,136 @@ export function useTTS(): UseTTSReturn {
   }, [])
 
   const playBlob = useCallback(async (blob: Blob): Promise<void> => {
-    const url = URL.createObjectURL(blob)
-    const audio = audioRef.current ?? new Audio()
-    audioRef.current = audio
-    audio.src = url
-    audio.volume = volumeRef.current
+    return new Promise<void>((resolve, reject) => {
+      const url = URL.createObjectURL(blob)
+      const audio = audioRef.current ?? new Audio()
+      audioRef.current = audio
+      audio.src = url
+      audio.volume = volumeRef.current
 
-    if (outputDeviceIdRef.current) {
-      await applySinkId(audio, outputDeviceIdRef.current)
-    }
+      if (outputDeviceIdRef.current) {
+        void applySinkId(audio, outputDeviceIdRef.current)
+      }
 
-    audio.onended = () => {
-      URL.revokeObjectURL(url)
-      setIsSpeaking(false)
-      audioRef.current = null
-    }
-    audio.onerror = () => {
-      URL.revokeObjectURL(url)
-      setIsSpeaking(false)
-      audioRef.current = null
-      if (import.meta.env.DEV) console.error('[TTS] audio playback error')
-    }
+      audio.onended = () => {
+        URL.revokeObjectURL(url)
+        resolve()
+      }
+      audio.onerror = () => {
+        URL.revokeObjectURL(url)
+        reject(new Error('playback error'))
+      }
 
+      setIsSpeaking(true)
+      audio.play().catch(reject)
+    })
+  }, [])
+
+  const playQueue = useCallback(async (): Promise<void> => {
+    if (isPlayingQueueRef.current) return
+    isPlayingQueueRef.current = true
     setIsSpeaking(true)
     try {
-      await audio.play()
-    } catch (err) {
-      URL.revokeObjectURL(url)
+      while (playbackQueueRef.current.length > 0) {
+        const blob = playbackQueueRef.current.shift()!
+        try {
+          await playBlob(blob)
+        } catch (err) {
+          if (import.meta.env.DEV) console.error('[TTS] chunk playback failed:', err)
+        }
+      }
+    } finally {
+      isPlayingQueueRef.current = false
       setIsSpeaking(false)
-      audioRef.current = null
-      if (import.meta.env.DEV) console.error('[TTS] play() failed:', err)
     }
+  }, [playBlob])
+
+  const synthesizeChunk = useCallback(async (text: string): Promise<Blob | null> => {
+    const clean = stripMarkdown(text).trim()
+    if (!clean) return null
+    try {
+      const response = await sidecarFetch('/api/voice/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: clean }),
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      const blob = await response.blob()
+      if (import.meta.env.DEV) {
+        console.log('[TTS] chunk synthesized:', clean.slice(0, 80), 'bytes:', blob.size)
+      }
+      return blob
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('[TTS] chunk synthesize failed:', err)
+      return null
+    }
+  }, [])
+
+  const enqueueBlob = useCallback(
+    (blob: Blob) => {
+      playbackQueueRef.current.push(blob)
+      void playQueue()
+    },
+    [playQueue],
+  )
+
+  const speakStreaming = useCallback(
+    async (text: string, isFinal: boolean): Promise<void> => {
+      if (!ttsEnabledRef.current) return
+
+      streamTextRef.current = text
+      const start = streamSynthesizedRef.current
+      if (text.length <= start && !isFinal) return
+
+      if (isFinal) {
+        const remaining = text.slice(start)
+        if (remaining.trim()) {
+          const blob = await synthesizeChunk(remaining)
+          if (blob) enqueueBlob(blob)
+        }
+        streamSynthesizedRef.current = text.length
+        return
+      }
+
+      const newPortion = text.slice(start)
+      const bp = findBreakpoint(newPortion, newPortion.length)
+      if (bp <= 0) return
+
+      const chunk = newPortion.slice(0, bp)
+      const blob = await synthesizeChunk(chunk)
+      if (blob) enqueueBlob(blob)
+      streamSynthesizedRef.current = start + bp
+    },
+    [synthesizeChunk, enqueueBlob],
+  )
+
+  const flushStream = useCallback(async (): Promise<void> => {
+    const text = streamTextRef.current
+    const start = streamSynthesizedRef.current
+    const remaining = text.slice(start)
+    if (remaining.trim()) {
+      const blob = await synthesizeChunk(remaining)
+      if (blob) enqueueBlob(blob)
+    }
+    streamSynthesizedRef.current = text.length
+  }, [synthesizeChunk, enqueueBlob])
+
+  const resetStream = useCallback((): void => {
+    streamTextRef.current = ''
+    streamSynthesizedRef.current = 0
+    playbackQueueRef.current = []
+    isPlayingQueueRef.current = false
   }, [])
 
   const speak = useCallback(
     async (text: string): Promise<void> => {
       if (!ttsEnabledRef.current) return
+
+      resetStream()
+      audioRef.current?.pause()
+      audioRef.current = null
 
       if (import.meta.env.DEV) console.log('[TTS] speak request:', text.slice(0, 100))
 
@@ -109,18 +231,22 @@ export function useTTS(): UseTTSReturn {
         if (import.meta.env.DEV)
           console.log('[TTS] speak response:', blob.size, 'bytes, type:', blob.type)
 
-        await playBlob(blob)
+        enqueueBlob(blob)
       } catch (err) {
         if (import.meta.env.DEV) console.error('[TTS] speak failed:', err)
         setIsSpeaking(false)
       }
     },
-    [playBlob],
+    [resetStream, enqueueBlob],
   )
 
   const stop = useCallback((): void => {
     audioRef.current?.pause()
     audioRef.current = null
+    playbackQueueRef.current = []
+    isPlayingQueueRef.current = false
+    streamTextRef.current = ''
+    streamSynthesizedRef.current = 0
     setIsSpeaking(false)
   }, [])
 
@@ -189,6 +315,9 @@ export function useTTS(): UseTTSReturn {
 
   return {
     speak,
+    speakStreaming,
+    flushStream,
+    resetStream,
     stop,
     isSpeaking,
     volume,
