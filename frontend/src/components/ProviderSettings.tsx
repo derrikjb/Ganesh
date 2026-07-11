@@ -60,6 +60,15 @@ async function saveLocalEndpoint(baseUrl: string, model: string): Promise<void> 
   if (!res.ok) throw new Error(`Failed to save local endpoint: ${res.status}`)
 }
 
+async function setConfig(key: string, value: unknown): Promise<void> {
+  const res = await sidecarFetch('/api/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, value }),
+  })
+  if (!res.ok) throw new Error(`Failed to save config: ${res.status}`)
+}
+
 async function testProviderConnection(provider: ProviderName): Promise<boolean> {
   const res = await sidecarFetch(`/api/config/providers/${provider}/test`, {
     method: 'POST',
@@ -83,6 +92,9 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [localModels, setLocalModels] = useState<string[]>([])
+  const [localModelLoading, setLocalModelLoading] = useState(false)
+
   const isLocal = selectedProvider === 'local'
 
   const loadProviders = useCallback(async () => {
@@ -104,6 +116,21 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }, [])
+
+  const refreshLocalModels = useCallback(async () => {
+    setLocalModelLoading(true)
+    try {
+      if (localBaseUrl.trim()) {
+        await saveLocalEndpoint(localBaseUrl, localModel)
+      }
+      const list = await fetchModels('local')
+      setLocalModels(list ?? [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLocalModelLoading(false)
+    }
+  }, [localBaseUrl, localModel])
 
   useEffect(() => {
     void loadProviders()
@@ -132,8 +159,6 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
     try {
       if (isLocal) {
         await saveLocalEndpoint(localBaseUrl, localModel)
-        const ok = await testProviderConnection(selectedProvider)
-        setTestResult(ok)
       } else {
         if (!apiKey) {
           setError('Enter an API key before testing.')
@@ -141,9 +166,10 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
           return
         }
         await saveProviderKey(selectedProvider, apiKey)
-        const ok = await testProviderConnection(selectedProvider)
-        setTestResult(ok)
       }
+      await setConfig('llm.provider', selectedProvider)
+      const ok = await testProviderConnection(selectedProvider)
+      setTestResult(ok)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setTestResult(false)
@@ -165,6 +191,7 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
       } else {
         await saveProviderKey(selectedProvider, apiKey)
       }
+      await setConfig('llm.provider', selectedProvider)
       await loadProviders()
       if (!isLocal) setApiKey('')
     } catch (e) {
@@ -251,13 +278,44 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
               >
                 Model
               </label>
+              <div className="flex gap-2">
+                <select
+                  id="local-model-input"
+                  value={localModel}
+                  onChange={(e) => setLocalModel(e.target.value)}
+                  onFocus={refreshLocalModels}
+                  className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  data-testid="local-model-select"
+                >
+                  {localModelLoading && <option value="">Loading…</option>}
+                  {!localModelLoading && localModels.length === 0 && (
+                    <option value="">
+                      {localModel ? localModel : 'No models found — type below'}
+                    </option>
+                  )}
+                  {!localModelLoading && localModels.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={refreshLocalModels}
+                  disabled={localModelLoading}
+                  className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary disabled:opacity-50"
+                  data-testid="local-model-refresh"
+                  title="Refresh model list"
+                >
+                  {localModelLoading ? '…' : '↻'}
+                </button>
+              </div>
               <input
-                id="local-model-input"
                 type="text"
                 value={localModel}
                 onChange={(e) => setLocalModel(e.target.value)}
-                placeholder="e.g. llama3.2"
-                className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                placeholder="Or type a model name"
+                className="mt-2 w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
                 data-testid="local-model-input"
               />
             </div>

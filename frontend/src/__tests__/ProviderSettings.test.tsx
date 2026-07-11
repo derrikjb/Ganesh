@@ -149,6 +149,7 @@ describe('ProviderSettings', () => {
       .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
       .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
       .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
+      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
       .mockResolvedValueOnce(mockResponse({ ok: true }))
 
     render(<ProviderSettings />)
@@ -173,6 +174,7 @@ describe('ProviderSettings', () => {
     mockFetch
       .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
       .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
+      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
       .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
       .mockResolvedValueOnce(mockResponse({ ok: false }))
 
@@ -274,6 +276,7 @@ describe('ProviderSettings', () => {
     mockFetch
       .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
       .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
+      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
       .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
       .mockResolvedValueOnce(mockResponse({ ok: true }))
 

@@ -72,7 +72,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(..., min_length=1)
-    provider: str = llm_service.DEFAULT_PROVIDER
+    provider: str | None = None
     model: str | None = None
     stream: bool = False
     conversation_id: Optional[str] = None
@@ -248,18 +248,25 @@ def _assemble_context(
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> Any:
-    if req.provider not in llm_service.SUPPORTED_PROVIDERS:
+    provider = req.provider or config_service.get_setting(
+        "llm.provider", llm_service.DEFAULT_PROVIDER
+    )
+    model = req.model
+    if provider == "local" and model is None:
+        model = config_service.get_setting("llm.local.model", None)
+
+    if provider not in llm_service.SUPPORTED_PROVIDERS:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Unknown provider: {req.provider!r}. "
+                f"Unknown provider: {provider!r}. "
                 f"Supported: {', '.join(llm_service.SUPPORTED_PROVIDERS)}"
             ),
         )
 
     if req.stream:
         return StreamingResponse(
-            _stream_response(req), media_type="text/event-stream"
+            _stream_response(req, provider, model), media_type="text/event-stream"
         )
 
     conv_id: Optional[str] = None
@@ -279,8 +286,8 @@ async def chat(req: ChatRequest) -> Any:
     try:
         response = llm_service.chat_completion(
             messages=messages,
-            provider=req.provider,
-            model=req.model,
+            provider=provider,
+            model=model,
             stream=False,
         )
     except llm_service.MissingAPIKeyError as exc:
@@ -311,14 +318,14 @@ async def chat(req: ChatRequest) -> Any:
         _persist_message(conv_id, "assistant", content)
 
     return ChatResponse(
-        provider=req.provider,
-        model=model,
+        provider=provider,
+        model=model or "",
         content=content,
         conversation_id=conv_id or "",
     )
 
 
-def _stream_response(req: ChatRequest) -> Any:
+def _stream_response(req: ChatRequest, provider: str, model: str | None) -> Any:
     """Stream the LLM response as SSE chunks.
 
     When conversation memory is enabled, emits an initial
@@ -346,8 +353,8 @@ def _stream_response(req: ChatRequest) -> Any:
     try:
         response = llm_service.chat_completion(
             messages=messages,
-            provider=req.provider,
-            model=req.model,
+            provider=provider,
+            model=model,
             stream=True,
         )
     except llm_service.MissingAPIKeyError as exc:
