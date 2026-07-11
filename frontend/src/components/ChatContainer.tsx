@@ -72,7 +72,7 @@ function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
 
 export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
   const { messages, isStreaming, streamingContent, error, sendMessage, retryLast, loadConversation, clearMessages } = useChat()
-  const { speakStreaming, flushStream, resetStream, stop: stopSpeaking, isSpeaking, ttsEnabled } = useTTS()
+  const { speak, speakStreaming, flushStream, resetStream, stop: stopSpeaking, isSpeaking, ttsEnabled, ttsEngine } = useTTS()
   const { textOnlyMode, naturalPacingEnabled, naturalPacingSpeed } = useAccessibility()
   const { setState: setVisualizerState } = useVisualizerState()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -169,15 +169,21 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
 
   useEffect(() => {
     if (!ttsEnabled || !isStreaming) return
+    if (ttsEngine === 'cloud') return
     if (streamingContent.length > lastFedLengthRef.current) {
       void speakStreaming(streamingContent, false)
       lastFedLengthRef.current = streamingContent.length
     }
-  }, [streamingContent, isStreaming, ttsEnabled, speakStreaming])
+  }, [streamingContent, isStreaming, ttsEnabled, ttsEngine, speakStreaming])
 
   useEffect(() => {
     if (!isStreaming && wasStreamingRef.current) {
-      if (lastFedLengthRef.current > 0) {
+      if (ttsEngine === 'cloud') {
+        const lastMsg = messages[messages.length - 1]
+        if (lastMsg?.role === 'assistant' && lastMsg.content) {
+          void speak(lastMsg.content)
+        }
+      } else if (lastFedLengthRef.current > 0) {
         const lastMsg = messages[messages.length - 1]
         if (lastMsg?.role === 'assistant' && lastMsg.content) {
           void speakStreaming(lastMsg.content, true)
@@ -187,7 +193,7 @@ export function ChatContainer({ onOpenDocument }: ChatContainerProps) {
       }
       lastFedLengthRef.current = 0
     }
-  }, [isStreaming, messages, speakStreaming, flushStream])
+  }, [isStreaming, messages, speakStreaming, flushStream, speak, ttsEngine])
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current

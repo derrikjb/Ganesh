@@ -33,7 +33,7 @@ DEFAULT_VOICES_FILENAME: str = "voices-v1.0.bin"
 
 ELEVENLABS_API_BASE: str = "https://api.elevenlabs.io/v1"
 ELEVENLABS_DEFAULT_VOICE_ID: str = "21m00Tcm4TlvDq8ikWAM"
-ELEVENLABS_DEFAULT_MODEL: str = "eleven_multilingual_v2"
+ELEVENLABS_DEFAULT_MODEL: str = "eleven_turbo_v2_5"
 ELEVENLABS_KEYRING_KEY: str = "elevenlabs_api_key"
 
 LOCAL_AUDIO_FORMAT: str = "wav"
@@ -323,6 +323,22 @@ class TTSService:
             "Content-Type": "application/json",
             "Accept": "audio/mpeg",
         }
+        payload = self._build_elevenlabs_payload(text)
+        timeout = config_service.get_setting("voice.tts_timeout", 30.0)
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.post(url, headers=headers, json=payload)
+        except httpx.HTTPError as exc:
+            logger.exception("TTS cloud synthesis failed: %s", exc)
+            return None
+        if resp.status_code != 200:
+            logger.warning(
+                "TTS cloud synthesis failed: HTTP %d", resp.status_code
+            )
+            return None
+        return resp.content
+
+    def _build_elevenlabs_payload(self, text: str) -> dict[str, Any]:
         payload: dict[str, Any] = {"text": text, "model_id": self._elevenlabs_model}
         voice_settings: dict[str, Any] = {}
         stability = config_service.get_setting("voice.elevenlabs_stability", None)
@@ -341,19 +357,65 @@ class TTSService:
             voice_settings["speed"] = speed
         if voice_settings:
             payload["voice_settings"] = voice_settings
+        return payload
+
+    async def synthesize_cloud_stream(
+        self,
+        text: str,
+        voice: Optional[str] = None,
+    ) -> Any:
+        """Stream audio from ElevenLabs streaming endpoint.
+
+        Yields MP3 chunks as they arrive from the API. Falls back to
+        local synthesis if the cloud key is missing or the request fails.
+        """
+        import httpx as _httpx
+
+        api_key = self._resolve_elevenlabs_api_key()
+        if not api_key:
+            logger.warning("TTS cloud stream: no API key, falling back to local")
+            local_audio = self._try_local(text, voice)
+            if local_audio is not None:
+                yield local_audio
+            return
+
+        voice_id = voice or self._elevenlabs_voice_id
+        api_base = config_service.get_setting(
+            "voice.elevenlabs_api_base", ELEVENLABS_API_BASE
+        )
+        url = f"{api_base}/text-to-speech/{voice_id}/stream"
+        headers = {
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+        payload = self._build_elevenlabs_payload(text)
         timeout = config_service.get_setting("voice.tts_timeout", 30.0)
+
         try:
-            with httpx.Client(timeout=timeout) as client:
-                resp = client.post(url, headers=headers, json=payload)
-        except httpx.HTTPError as exc:
-            logger.exception("TTS cloud synthesis failed: %s", exc)
-            return None
-        if resp.status_code != 200:
-            logger.warning(
-                "TTS cloud synthesis failed: HTTP %d", resp.status_code
-            )
-            return None
-        return resp.content
+            async with _httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream(
+                    "POST", url, headers=headers, json=payload
+                ) as resp:
+                    if resp.status_code != 200:
+                        body = await resp.aread()
+                        logger.warning(
+                            "TTS cloud stream failed: HTTP %d, body=%s",
+                            resp.status_code,
+                            body[:200],
+                        )
+                        local_audio = self._try_local(text, voice)
+                        if local_audio is not None:
+                            yield local_audio
+                        return
+                    async for chunk in resp.aiter_bytes():
+                        if chunk:
+                            yield chunk
+        except _httpx.HTTPError as exc:
+            logger.exception("TTS cloud stream error: %s", exc)
+            local_audio = self._try_local(text, voice)
+            if local_audio is not None:
+                yield local_audio
 
 
 def _content_type(fmt: str) -> str:

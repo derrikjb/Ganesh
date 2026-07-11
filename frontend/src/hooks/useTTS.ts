@@ -66,6 +66,9 @@ export function useTTS(): UseTTSReturn {
   )
   const ttsEnabledRef = useRef(ttsEnabled)
 
+  const [ttsEngine, setTtsEngine] = useState<string>('local')
+  const ttsEngineRef = useRef(ttsEngine)
+
   const streamTextRef = useRef('')
   const streamSynthesizedRef = useRef(0)
   const streamIsFinalRef = useRef(false)
@@ -80,6 +83,18 @@ export function useTTS(): UseTTSReturn {
       .enumerateDevices()
       .then((devices) => {
         setOutputDevices(devices.filter((d) => d.kind === 'audiooutput'))
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    sidecarFetch('/api/voice/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.tts_engine) {
+          setTtsEngine(data.tts_engine)
+          ttsEngineRef.current = data.tts_engine
+        }
       })
       .catch(() => {})
   }, [])
@@ -250,8 +265,12 @@ export function useTTS(): UseTTSReturn {
 
       if (import.meta.env.DEV) console.log('[TTS] speak request:', text.slice(0, 100))
 
+      const endpoint = ttsEngineRef.current === 'cloud'
+        ? '/api/voice/synthesize-stream'
+        : '/api/voice/synthesize'
+
       try {
-        const response = await sidecarFetch('/api/voice/synthesize', {
+        const response = await sidecarFetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text }),
@@ -360,6 +379,7 @@ export function useTTS(): UseTTSReturn {
   return {
     speak,
     speakStreaming,
+    speakStream: speak,
     flushStream,
     resetStream,
     stop,
@@ -372,5 +392,6 @@ export function useTTS(): UseTTSReturn {
     setOutputDeviceId,
     ttsEnabled,
     setTtsEnabled,
+    ttsEngine,
   }
 }

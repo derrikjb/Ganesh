@@ -15,9 +15,10 @@ import io
 import os
 import tempfile
 import wave
-from typing import Any, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ganesh_backend.services import stt as stt_service
@@ -149,6 +150,37 @@ async def synthesize(req: SynthesizeRequest) -> Response:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return Response(content=audio_bytes, media_type=content_type)
+
+
+@router.post("/synthesize-stream")
+async def synthesize_stream(req: SynthesizeRequest) -> StreamingResponse:
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="text must be non-empty")
+
+    from ganesh_backend.services.tts import strip_markdown
+
+    service = get_tts_service()
+    engine_pref = config_service.get_setting("voice.tts_engine", "local")
+
+    if engine_pref == "cloud":
+        async def cloud_stream() -> AsyncGenerator[bytes, None]:
+            async for chunk in service.synthesize_cloud_stream(
+                strip_markdown(req.text), req.voice
+            ):
+                yield chunk
+
+        return StreamingResponse(cloud_stream(), media_type="audio/mpeg")
+
+    async def local_stream() -> AsyncGenerator[bytes, None]:
+        try:
+            audio_bytes, _content_type, _source = await asyncio.to_thread(
+                service.synthesize, req.text, req.voice
+            )
+            yield audio_bytes
+        except (ValueError, TTSError) as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return StreamingResponse(local_stream(), media_type="audio/wav")
 
 
 class ChimeRequest(BaseModel):

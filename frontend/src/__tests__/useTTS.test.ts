@@ -18,6 +18,7 @@ function mockResponse(ok = true): Response {
     status: ok ? 200 : 500,
     statusText: ok ? 'OK' : 'Internal Server Error',
     blob: vi.fn().mockResolvedValue(MOCK_BLOB),
+    json: vi.fn().mockResolvedValue({ tts_engine: 'local' }),
   } as unknown as Response
 }
 
@@ -137,7 +138,14 @@ describe('useTTS', () => {
       await result.current.speak('Hello world')
     })
 
-    expect(mockSidecarFetch).not.toHaveBeenCalled()
+    expect(mockSidecarFetch).not.toHaveBeenCalledWith(
+      '/api/voice/synthesize',
+      expect.anything(),
+    )
+    expect(mockSidecarFetch).not.toHaveBeenCalledWith(
+      '/api/voice/synthesize-stream',
+      expect.anything(),
+    )
   })
 
   it('speakStreaming chunks text at sentence breakpoints', async () => {

@@ -49,6 +49,7 @@ export interface ChatResponse {
 export interface UseTTSReturn {
   speak: (text: string) => Promise<void>
   speakStreaming: (text: string, isFinal: boolean) => Promise<void>
+  speakStream: (text: string) => Promise<void>
   flushStream: () => Promise<void>
   resetStream: () => void
   stop: () => void
@@ -61,4 +62,5 @@ export interface UseTTSReturn {
   setOutputDeviceId: (id: string | null) => void
   ttsEnabled: boolean
   setTtsEnabled: (enabled: boolean) => void
+  ttsEngine: string
 }

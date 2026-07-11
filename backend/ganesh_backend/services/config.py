@@ -80,7 +80,7 @@ DEFAULT_CONFIG = {
         "kokoro_speed": 1.0,
         "kokoro_lang": "en-us",
         "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM",
-        "elevenlabs_model": "eleven_multilingual_v2",
+        "elevenlabs_model": "eleven_turbo_v2_5",
         "elevenlabs_api_base": "https://api.elevenlabs.io/v1",
         "elevenlabs_stability": None,
         "elevenlabs_similarity_boost": None,
