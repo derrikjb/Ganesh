@@ -9,8 +9,10 @@ Exposes:
 """
 from __future__ import annotations
 
+import io
 import os
 import tempfile
+import wave
 from typing import Any, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
@@ -146,6 +148,48 @@ async def synthesize(req: SynthesizeRequest) -> Response:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return Response(content=audio_bytes, media_type=content_type)
+
+
+class ChimeRequest(BaseModel):
+    volume: float = Field(0.5, ge=0.0, le=1.0, description="Volume 0.0-1.0")
+    frequency: float = Field(440.0, ge=100.0, le=2000.0, description="Hz")
+
+
+@router.post("/chime")
+async def play_chime(req: ChimeRequest) -> Response:
+    """Generate a short WAV chime at the specified volume for testing audio output."""
+    import math
+    import struct
+
+    sample_rate = 22050
+    duration = 0.3  # 300ms chime
+    num_samples = int(sample_rate * duration)
+    samples: list[int] = []
+    fade_samples = int(sample_rate * 0.01)
+    for i in range(num_samples):
+        # Fade in/out envelope (10ms each)
+        if i < fade_samples:
+            envelope = i / fade_samples
+        elif i > num_samples - fade_samples:
+            envelope = (num_samples - i) / fade_samples
+        else:
+            envelope = 1.0
+        # Sine wave
+        value = (
+            math.sin(2 * math.pi * req.frequency * i / sample_rate)
+            * envelope
+            * req.volume
+        )
+        samples.append(int(value * 32767))
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+
+    return Response(content=buf.getvalue(), media_type="audio/wav")
 
 
 @router.get("/tts-status", response_model=TtsStatusResponse)
@@ -464,9 +508,6 @@ def _list_input_devices() -> list[dict[str, str]]:
     return devices
 
 
-import io
-import wave
-
 RECORD_RATE = 16000
 RECORD_CHANNELS = 1
 RECORD_SAMPLE_WIDTH = 2
@@ -522,7 +563,6 @@ async def start_mic_test() -> Any:
     import threading
     import struct
     import math
-    import stat as stat_mod
 
     global _test_proc, _test_level, _test_thread, _test_fifo
 
@@ -543,7 +583,7 @@ async def start_mic_test() -> Any:
 
     _test_level = 0.0
 
-    def monitor():
+    def monitor() -> None:
         global _test_level
         fifo = _test_fifo
         proc = _test_proc

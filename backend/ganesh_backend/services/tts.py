@@ -14,6 +14,7 @@ No model downloads happen at import time.
 from __future__ import annotations
 
 import io
+import logging
 import os
 import uuid
 import wave
@@ -22,6 +23,8 @@ from typing import Any, Optional
 import httpx
 
 from ganesh_backend.services.config import config_service
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PIPER_VOICE: str = ""
 
@@ -108,18 +111,23 @@ class TTSService:
         if engine_pref == "cloud":
             cloud_audio = self._try_cloud(text, voice)
             if cloud_audio is not None:
+                logger.info("TTS synthesis: engine=%s, source=%s", engine_pref, "cloud")
                 return cloud_audio, _content_type(CLOUD_AUDIO_FORMAT), "cloud"
             local_audio = self._try_local(text, voice)
             if local_audio is not None:
+                logger.info("TTS synthesis: engine=%s, source=%s", engine_pref, "local")
                 return local_audio, _content_type(LOCAL_AUDIO_FORMAT), "local"
         else:
             local_audio = self._try_local(text, voice)
             if local_audio is not None:
+                logger.info("TTS synthesis: engine=%s, source=%s", engine_pref, "local")
                 return local_audio, _content_type(LOCAL_AUDIO_FORMAT), "local"
             cloud_audio = self._try_cloud(text, voice)
             if cloud_audio is not None:
+                logger.info("TTS synthesis: engine=%s, source=%s", engine_pref, "cloud")
                 return cloud_audio, _content_type(CLOUD_AUDIO_FORMAT), "cloud"
 
+        logger.error("TTS synthesis failed: both local and cloud unavailable")
         raise TTSError("Both local and cloud TTS failed; no audio produced.")
 
     def is_available(self) -> bool:
@@ -185,12 +193,19 @@ class TTSService:
 
     def _try_local(self, text: str, voice: Optional[str]) -> Optional[bytes]:
         model_path = voice or self._active_piper_voice_path() or self._piper_voice_path
-        if not model_path or not self._piper_importable():
+        if not model_path:
+            logger.warning(
+                "TTS local synthesis skipped: no Piper voice model path configured"
+            )
+            return None
+        if not self._piper_importable():
+            logger.warning("TTS local synthesis skipped: piper package not importable")
             return None
         try:
             piper_voice = self._load_piper_voice(model_path)
             return self._render_piper_wav(piper_voice, text)
-        except Exception:
+        except Exception as exc:
+            logger.exception("TTS local synthesis failed: %s", exc)
             return None
 
     def _load_piper_voice(self, model_path: str) -> Any:
@@ -270,9 +285,13 @@ class TTSService:
         try:
             with httpx.Client(timeout=30.0) as client:
                 resp = client.post(url, headers=headers, json=payload)
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
+            logger.exception("TTS cloud synthesis failed: %s", exc)
             return None
         if resp.status_code != 200:
+            logger.warning(
+                "TTS cloud synthesis failed: HTTP %d", resp.status_code
+            )
             return None
         return resp.content
 

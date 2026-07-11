@@ -5,6 +5,7 @@ calls are made.
 """
 from __future__ import annotations
 
+import io
 import os
 import sys
 from pathlib import Path
@@ -116,3 +117,46 @@ def test_cloud_fallback():
     assert content_type == "audio/mpeg"
     assert audio_bytes == b"\x00\x01\x02MP3"
     mock_client.post.assert_called_once()
+
+
+def test_chime_default():
+    client = TestClient(main_module.create_app())
+    with client:
+        resp = client.post("/api/voice/chime", json={})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "audio/wav"
+    body = resp.content
+    assert len(body) > 0
+    assert body[:4] == b"RIFF"
+    assert body[8:12] == b"WAVE"
+
+
+def test_chime_volume():
+    import struct
+    import wave
+
+    client = TestClient(main_module.create_app())
+    with client:
+        resp = client.post("/api/voice/chime", json={"volume": 0.0})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "audio/wav"
+    body = resp.content
+    assert body[:4] == b"RIFF"
+    assert body[8:12] == b"WAVE"
+
+    buf = io.BytesIO(body)
+    with wave.open(buf, "rb") as wav:
+        frames = wav.readframes(wav.getnframes())
+    num_samples = len(frames) // 2
+    samples = struct.unpack(f"<{num_samples}h", frames)
+    assert all(s == 0 for s in samples)
+
+
+def test_chime_invalid_volume():
+    client = TestClient(main_module.create_app())
+    with client:
+        resp = client.post("/api/voice/chime", json={"volume": 1.5})
+
+    assert resp.status_code == 422
