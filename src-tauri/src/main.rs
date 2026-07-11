@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use tauri::{
     image::Image, menu::{Menu, MenuItem}, tray::{MouseButton, TrayIconEvent}, Emitter, Manager, RunEvent, WindowEvent,
 };
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 fn resolve_sidecar() -> (String, Vec<String>) {
     let exe_dir = std::env::current_exe()
@@ -76,8 +76,12 @@ fn set_ptt_hotkey(
 
     let app_handle = app.clone();
     global
-        .on_shortcut(hotkey.as_str(), move |app, _shortcut, _event| {
-            let _ = app.emit("ganesh:ptt-toggle", ());
+        .on_shortcut(hotkey.as_str(), move |app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = app.emit("ganesh:ptt-press", ());
+            } else {
+                let _ = app.emit("ganesh:ptt-release", ());
+            }
         })
         .map_err(|e| format!("failed to register PTT hotkey '{hotkey}': {e}"))?;
 
@@ -191,8 +195,12 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
 
             let ptt_state = app.state::<PttState>();
             let ptt_hotkey = ptt_state.hotkey.lock().unwrap().clone();
-            global.on_shortcut(ptt_hotkey.as_str(), move |app, _shortcut, _event| {
-                let _ = app.emit("ganesh:ptt-toggle", ());
+            global.on_shortcut(ptt_hotkey.as_str(), move |app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    let _ = app.emit("ganesh:ptt-press", ());
+                } else {
+                    let _ = app.emit("ganesh:ptt-release", ());
+                }
             })?;
 
             let update_state = app.state::<UpdateState>();

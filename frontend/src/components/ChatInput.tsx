@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { listen } from '@tauri-apps/api/event'
 import { sidecarFetch } from '../api'
 import { useAccessibility } from '../contexts/AccessibilityContext'
 import { useVoiceRecording } from '../hooks/useVoiceRecording'
@@ -55,16 +56,25 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   }, [])
 
   useEffect(() => {
-    const handler = () => {
-      if (isRecording) {
-        void stop()
-      } else if (!isTranscribing) {
+    const unlisteners: (() => void)[] = []
+    let started = false
+
+    listen('ganesh:ptt-press', () => {
+      if (!started && activationMode === 'push_to_talk' && !isTranscribing) {
+        started = true
         void start()
       }
-    }
-    window.addEventListener('ganesh:ptt-toggle', handler)
-    return () => window.removeEventListener('ganesh:ptt-toggle', handler)
-  }, [isRecording, isTranscribing, start, stop])
+    }).then((fn) => unlisteners.push(fn)).catch(() => {})
+
+    listen('ganesh:ptt-release', () => {
+      if (started) {
+        started = false
+        void stop()
+      }
+    }).then((fn) => unlisteners.push(fn)).catch(() => {})
+
+    return () => { unlisteners.forEach((fn) => fn()) }
+  }, [activationMode, isTranscribing, start, stop])
 
   const handleFileSelect = useCallback((fileList: FileList) => {
     const files: AttachedFile[] = []

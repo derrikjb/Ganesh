@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { sidecarFetch } from '../api'
 import { useTTS } from '../hooks/useTTS'
@@ -62,6 +62,10 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [activationMode, setActivationMode] = useState<'click_to_talk' | 'push_to_talk' | 'vad'>('click_to_talk')
   const [pttHotkey, setPttHotkey] = useState('Control+Space')
   const [pttHotkeySaving, setPttHotkeySaving] = useState(false)
+  const [capturing, setCapturing] = useState(false)
+  const capturingRef = useRef(false)
+  const capturedRef = useRef<string | null>(null)
+  const heldModifierRef = useRef<string | null>(null)
   const [sttEngine, setSttEngine] = useState<'local' | 'cloud'>('local')
   const [ttsEngine, setTtsEngine] = useState<'local' | 'cloud'>('local')
   const [whisperModel, setWhisperModel] = useState('tiny')
@@ -81,6 +85,78 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [inputDevice, setInputDevice] = useState<string>('')
   const [testing, setTesting] = useState(false)
   const [level, setLevel] = useState(0)
+
+  const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta'])
+  const TAURI_MODIFIER_NAMES: Record<string, string> = {
+    Control: 'Control',
+    Shift: 'Shift',
+    Alt: 'Alt',
+    Meta: 'Super',
+  }
+  const KEY_DISPLAY: Record<string, string> = {
+    ' ': 'Space',
+    ArrowUp: 'Up',
+    ArrowDown: 'Down',
+    ArrowLeft: 'Left',
+    ArrowRight: 'Right',
+  }
+
+  const handleHotkeyCapture = useCallback((e: React.KeyboardEvent) => {
+    if (!capturingRef.current) return
+    e.preventDefault()
+
+    const isMod = MODIFIER_KEYS.has(e.key)
+    const modName = isMod ? TAURI_MODIFIER_NAMES[e.key] : null
+    if (modName) {
+      heldModifierRef.current = modName
+    }
+
+    let combo: string
+    if (heldModifierRef.current) {
+      if (isMod) {
+        combo = heldModifierRef.current
+      } else {
+        const keyName = KEY_DISPLAY[e.key] || e.key
+        combo = `${heldModifierRef.current}+${keyName}`
+      }
+    } else if (!isMod) {
+      const keyName = KEY_DISPLAY[e.key] || e.key
+      combo = keyName
+    } else {
+      return
+    }
+
+    capturedRef.current = combo
+    setPttHotkey(combo)
+  }, [])
+
+  const handleHotkeyRelease = useCallback(() => {
+    if (!capturingRef.current) return
+    const combo = capturedRef.current
+    if (combo && combo !== pttHotkey) {
+      setCapturing(false)
+      capturingRef.current = false
+      heldModifierRef.current = null
+      void (async () => {
+        setPttHotkeySaving(true)
+        try {
+          const result = await invoke<string>('set_ptt_hotkey', { hotkey: combo })
+          setPttHotkey(result)
+        } catch {
+          setError('Failed to set hotkey. Use a valid combination.')
+        } finally {
+          setPttHotkeySaving(false)
+        }
+      })()
+    }
+  }, [pttHotkey])
+
+  const startCapture = useCallback(() => {
+    setCapturing(true)
+    capturingRef.current = true
+    capturedRef.current = null
+    heldModifierRef.current = null
+  }, [])
 
   const loadSettings = useCallback(async () => {
     try {
@@ -327,29 +403,50 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                 Push-to-Talk Hotkey
               </label>
               <div className="flex gap-2">
-                <input
+                <button
                   id="ptt-hotkey-input"
-                  type="text"
-                  value={pttHotkey}
-                  onChange={(e) => setPttHotkey(e.target.value)}
-                  placeholder="Control+Space"
-                  className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  type="button"
+                  onClick={startCapture}
+                  onKeyDown={(e) => {
+                    if (capturingRef.current) {
+                      handleHotkeyCapture(e)
+                    } else if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      startCapture()
+                    }
+                  }}
+                  onKeyUp={handleHotkeyRelease}
+                  onBlur={() => {
+                    if (capturingRef.current) {
+                      setCapturing(false)
+                      capturingRef.current = false
+                    }
+                  }}
+                  className={`flex-1 rounded border px-3 py-2 text-sm ${
+                    capturing
+                      ? 'border-accent bg-accent/10 text-accent'
+                      : 'border-border-primary bg-bg-primary text-text-primary'
+                  }`}
                   data-testid="ptt-hotkey-input"
-                />
+                >
+                  {capturing ? 'Press keys…' : pttHotkey || 'Click to set'}
+                </button>
                 <button
                   type="button"
                   onClick={async () => {
-                    setPttHotkeySaving(true)
-                    try {
-                      const result = await invoke<string>('set_ptt_hotkey', { hotkey: pttHotkey })
-                      setPttHotkey(result)
-                    } catch {
-                      setError('Failed to set hotkey. Use format like Control+Space or Alt+Shift+R.')
-                    } finally {
-                      setPttHotkeySaving(false)
+                    if (capturedRef.current) {
+                      setPttHotkeySaving(true)
+                      try {
+                        const result = await invoke<string>('set_ptt_hotkey', { hotkey: capturedRef.current })
+                        setPttHotkey(result)
+                      } catch {
+                        setError('Failed to set hotkey. Use a valid combination like Control+Space or Alt+R.')
+                      } finally {
+                        setPttHotkeySaving(false)
+                      }
                     }
                   }}
-                  disabled={pttHotkeySaving}
+                  disabled={pttHotkeySaving || !capturedRef.current}
                   className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
                   data-testid="ptt-hotkey-save"
                 >
@@ -357,7 +454,8 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                 </button>
               </div>
               <p className="mt-1 text-xs text-text-muted">
-                Use modifier+key format (e.g. Control+Space, Alt+Shift+R, Super+M).
+                Click the field, then press a key combination (e.g. Ctrl+K, Alt+Space, or a single key like F5).
+                The secondary key updates live while holding a modifier. Lift all keys to finalize.
               </p>
             </div>
           )}
