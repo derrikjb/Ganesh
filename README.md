@@ -25,7 +25,7 @@ The app pairs a lightweight Tauri v2 desktop shell with a Python FastAPI sidecar
 
 ### Core Features
 
-- **Chat and voice I/O**. Type messages or speak to Ganesh. Speech-to-text uses faster-whisper locally with a cloud fallback. Text-to-speech uses Piper locally with a cloud fallback.
+- **Chat and voice I/O**. Type messages or speak to Ganesh. Speech-to-text uses faster-whisper locally with a cloud fallback. Text-to-speech uses Kokoro locally with a cloud fallback.
 - **Dynamic memory**. Ganesh remembers context across sessions using mem0 OSS and LanceDB. You can explicitly add, update, invalidate, or delete memories.
 - **Adaptive personality**. A configurable trait matrix shifts based on conversation context. Personality stays bounded so it does not drift endlessly.
 - **Sub-agent orchestration**. Spawn background tasks and sub-agents. Query their status, cancel them, or collect results. All task state lives in a local SQLite store.
@@ -272,21 +272,16 @@ Voice settings are configured in-app via the Voice Settings panel (microphone ic
 ```yaml
 voice:
   stt_engine: local        # "local" (faster-whisper) or "cloud" (Deepgram)
-  tts_engine: local        # "local" (Piper) or "cloud" (ElevenLabs)
-  whisper_model: tiny      # tiny|base|small|medium|large|large-v3|large-v3-turbo|distil-large-v3
-  stt_device: auto         # "auto" | "cpu" | "cuda"
+  tts_engine: local        # "local" (Kokoro) or "cloud" (ElevenLabs)
   tts_device: auto         # "auto" | "cpu" | "cuda"
-  deepgram_model: nova-2
-  elevenlabs_voice_id: "21m00Tcm4TlvDq8ikWAM"
-  piper_voices: []         # list of {id, name, path} — managed via the UI file picker
-  piper_active_voice: null
+  tts_voice_name: af_heart # Kokoro voice name
 ```
 
 Cloud API keys for Deepgram and ElevenLabs are stored in the OS keyring, not in the config file. Set them via the Voice Settings panel.
 
 ### GPU Acceleration (NVIDIA CUDA)
 
-STT (faster-whisper via CTranslate2) and TTS (Piper via ONNX Runtime) both support optional NVIDIA GPU acceleration. By default, `stt_device` and `tts_device` are set to `auto`, which detects CUDA and uses it if available. Users without NVIDIA GPUs are unaffected — the app runs on CPU.
+STT (faster-whisper via CTranslate2) and TTS (Kokoro via ONNX Runtime) both support optional NVIDIA GPU acceleration. By default, `stt_device` and `tts_device` are set to `auto`, which detects CUDA and uses it if available. Users without NVIDIA GPUs are unaffected — the app runs on CPU.
 
 #### Prerequisites for GPU acceleration
 

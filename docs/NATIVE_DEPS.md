@@ -14,7 +14,7 @@ and their handling in the PyInstaller frozen binary (`backend/pyinstaller.spec`)
 | `pydantic-core` | Yes (Rust) | `pydantic_core` | `collect_all` + `collect_dynamic_libs` | Shared lib `libpydantic_core` |
 | `keyring` | Yes | `keyring` | `collect_all("keyring")` | Platform-specific backends (SecretStorage on Linux, Windows Credential Manager) |
 | `pyyaml` | No | `yaml` | Pure Python | Note: import name is `yaml`, not `pyyaml` |
-| `piper-tts` | Yes (ONNX Runtime, C++) | `piper` | `collect_all("piper")` + `collect_dynamic_libs("onnxruntime")` | Note: package name is `piper-tts`, import name is `piper`. ONNX Runtime ships native shared libs. |
+| `kokoro-onnx` | Yes (ONNX Runtime, C++) | `kokoro_onnx` | `collect_all("kokoro_onnx")` + `collect_dynamic_libs("onnxruntime")` | Note: package name is `kokoro-onnx`, import name is `kokoro_onnx`. ONNX Runtime ships native shared libs. Requires `espeak-ng` system package. |
 | `faster-whisper` | Yes (C++) | `faster_whisper` | `collect_all("faster_whisper")` + `collect_dynamic_libs("ctranslate2")` | CTranslate2 native runtime; pulls onnxruntime + av (PyAV) as transitive native deps |
 | `vaderSentiment` | No | `vaderSentiment` | Pure Python | Lexicon + rule-based sentiment for emotion detection (Task 34). Package and import name both `vaderSentiment`. |
 
@@ -40,7 +40,7 @@ These will be added to the registry and the PyInstaller spec as they land:
 |------------|----------------|-------------|
 | `sounddevice` | PortAudio (C) | `sounddevice` |
 
-> `faster-whisper`, `lancedb`, and `piper-tts` have graduated from this list —
+> `faster-whisper`, `lancedb`, and `kokoro-onnx` have graduated from this list —
 > they are now installed, registered in `main.NATIVE_DEPS`, and collected in
 > `pyinstaller.spec`.
 
@@ -77,7 +77,8 @@ Expected files:
 | File | Description |
 |------|-------------|
 | `stt.bin` | faster-whisper base model (CTranslate2 format) |
-| `tts.onnx` | piper default voice (ONNX format) |
+| `kokoro-v1.0.onnx` | Kokoro TTS model (ONNX format) |
+| `voices-v1.0.bin` | Kokoro voice definitions |
 | `embeddings.bin` | sentence embeddings (all-MiniLM-L6-v2) |
 
 ### CI
@@ -94,12 +95,12 @@ Ganesh ships two installer variants, each driven by its own PyInstaller spec:
 | Variant | Spec file | Models bundled | First-run behavior |
 |---------|-----------|----------------|--------------------|
 | **Minimal** | `backend/pyinstaller-minimal.spec` | None | Downloads models on first run (Task 22) |
-| **Full** | `backend/pyinstaller-full.spec` | `stt.bin`, `tts.onnx`, `embeddings.bin` in `dist/models/` | Runs offline immediately |
+| **Full** | `backend/pyinstaller-full.spec` | `stt.bin`, `kokoro-v1.0.onnx`, `voices-v1.0.bin`, `embeddings.bin` in `dist/models/` | Runs offline immediately |
 
 ### Minimal spec
 
 The minimal spec collects the same native Python runtimes (pydantic, uvicorn,
-piper, faster-whisper, ...) as the full spec but **never** adds `.onnx` /
+kokoro_onnx, faster-whisper, ...) as the full spec but **never** adds `.onnx` /
 `.bin` model weight files to `datas`. A `MINIMAL_EXCLUDES` tuple and an
 `_is_model_weight` filter strip any model files that `collect_all()` might
 accidentally pull in from package data directories.
