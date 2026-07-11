@@ -3,9 +3,10 @@
 Exposes:
     POST /api/voice/transcribe   — multipart audio upload -> transcription
     GET  /api/voice/stt-status    — local STT engine availability + model state
-    POST /api/voice/synthesize    — text -> audio (Piper local + ElevenLabs cloud)
+    POST /api/voice/synthesize    — text -> audio (Kokoro local + ElevenLabs cloud)
     GET  /api/voice/tts-status    — TTS backend availability
     GET  /api/voice/voices        — list available TTS voices
+    GET  /api/voice/tts-voices    — list available Kokoro voice names
 """
 from __future__ import annotations
 
@@ -112,7 +113,7 @@ async def stt_status() -> Any:
 class SynthesizeRequest(BaseModel):
     text: str = Field(..., description="Text to synthesize.")
     voice: Optional[str] = Field(
-        None, description="Optional voice id or Piper model path override."
+        None, description="Optional Kokoro voice name override."
     )
 
 
@@ -210,8 +211,20 @@ async def voices() -> Any:
     )
 
 
+@router.get("/tts-voices")
+async def list_tts_voices() -> dict[str, Any]:
+    """Return available Kokoro TTS voice names."""
+    service = get_tts_service()
+    try:
+        voices = service.list_voices()
+        local_voices = [v["id"] for v in voices if v.get("backend") == "local"]
+    except Exception:
+        local_voices = []
+    return {"voices": local_voices}
+
+
 # ---------------------------------------------------------------------------
-# Voice settings: STT/TTS engine selection, whisper model, piper voice mgmt
+# Voice settings: STT/TTS engine selection, whisper model, Kokoro voice mgmt
 # ---------------------------------------------------------------------------
 
 
@@ -226,8 +239,8 @@ class VoiceSettingsResponse(BaseModel):
     stt_language: Optional[str]
     deepgram_model: str
     elevenlabs_voice_id: str
-    piper_voices: list[dict[str, Any]]
-    piper_active_voice: Optional[str]
+    tts_voice_name: str
+    tts_voices: list[str]
     stt_local_available: bool
     stt_cloud_available: bool
     tts_local_available: bool
@@ -246,12 +259,7 @@ class VoiceSettingsUpdate(BaseModel):
     stt_language: Optional[str] = None
     deepgram_model: Optional[str] = None
     elevenlabs_voice_id: Optional[str] = None
-    piper_active_voice: Optional[str] = None
-
-
-class AddPiperVoiceRequest(BaseModel):
-    name: str
-    path: str
+    tts_voice_name: Optional[str] = None
 
 
 class VoiceKeyUpdate(BaseModel):
@@ -265,6 +273,12 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         stt_service.get_deepgram_key()
     except stt_service.STTError:
         cloud_available = False
+    try:
+        tts_voices = [
+            v["id"] for v in service.list_voices() if v.get("backend") == "local"
+        ]
+    except Exception:
+        tts_voices = []
     return VoiceSettingsResponse(
         stt_engine=config_service.get_setting("voice.stt_engine", "local"),
         tts_engine=config_service.get_setting("voice.tts_engine", "local"),
@@ -278,8 +292,8 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         elevenlabs_voice_id=config_service.get_setting(
             "voice.elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM"
         ),
-        piper_voices=config_service.get_setting("voice.piper_voices", []),
-        piper_active_voice=config_service.get_setting("voice.piper_active_voice"),
+        tts_voice_name=config_service.get_setting("voice.tts_voice_name", "af_heart"),
+        tts_voices=tts_voices,
         stt_local_available=stt_service.is_local_available(),
         stt_cloud_available=cloud_available,
         tts_local_available=service._local_available(),
@@ -305,50 +319,11 @@ async def update_voice_settings(req: VoiceSettingsUpdate) -> Any:
     if "stt_device" in updates and updates["stt_device"] != old_device:
         stt_service.reset_model_cache()
     old_tts_device = config_service.get_setting("voice.tts_device", "auto")
+    service = get_tts_service()
     if "tts_device" in updates and updates["tts_device"] != old_tts_device:
-        service = get_tts_service()
-        service._voice_cache.clear()
-    return _build_voice_settings()
-
-
-@router.post("/piper-voices")
-async def add_piper_voice(req: AddPiperVoiceRequest) -> dict[str, Any]:
-    import os
-
-    onnx_path = req.path
-    json_path = onnx_path + ".json"
-
-    if not os.path.isfile(onnx_path):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Voice model file not found: {onnx_path}",
-        )
-    if not os.path.isfile(json_path):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Voice config file not found: {json_path}. "
-                "Piper requires both <name>.onnx and <name>.onnx.json. "
-                "If your config is named <name>-onnx.json, rename it to <name>.onnx.json."
-            ),
-        )
-
-    service = get_tts_service()
-    voice = service.add_voice(req.name, req.path)
-    return voice
-
-
-@router.delete("/piper-voices/{voice_id}", status_code=204)
-async def delete_piper_voice(voice_id: str) -> Response:
-    service = get_tts_service()
-    service.remove_voice(voice_id)
-    return Response(status_code=204)
-
-
-@router.post("/piper-voices/{voice_id}/activate", response_model=VoiceSettingsResponse)
-async def activate_piper_voice(voice_id: str) -> Any:
-    service = get_tts_service()
-    service.set_active_voice(voice_id)
+        service._kokoro_cache.clear()
+    if "tts_voice_name" in updates:
+        service._kokoro_cache.clear()
     return _build_voice_settings()
 
 
