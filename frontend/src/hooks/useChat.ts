@@ -148,13 +148,18 @@ export function useChat(): UseChatReturn {
                   updateConversationId(json.conversation_id)
                 }
               }
+              if (json.error) {
+                throw new Error(json.error)
+              }
               if (json.done) break
               if (json.content) {
                 accumulated += json.content
                 setStreamingContent(accumulated)
               }
-            } catch {
-              // skip malformed JSON
+            } catch (parseErr) {
+              if (parseErr instanceof Error && parseErr.message !== 'Unexpected token') {
+                throw parseErr
+              }
             }
           }
         }

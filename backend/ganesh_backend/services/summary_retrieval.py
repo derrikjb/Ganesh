@@ -72,8 +72,10 @@ class ContextAssemblyService:
     ) -> list[dict[str, Any]]:
         """Build the full context window for a chat turn.
 
-        Returns the messages array with system messages prepended and the
-        new user message appended.
+        ``user_message`` is used for semantic search (matching against
+        checkpoint and conversation summaries) but is NOT appended to the
+        returned messages — it is already the last element of
+        ``existing_messages`` from the frontend.
         """
         system_msgs: list[dict[str, str]] = []
 
@@ -93,9 +95,7 @@ class ContextAssemblyService:
         if transcript_msg is not None:
             system_msgs.append(transcript_msg)
 
-        return system_msgs + existing_messages + [
-            {"role": "user", "content": user_message}
-        ]
+        return system_msgs + existing_messages
 
     def _build_checkpoint_context_message(
         self, conversation_id: str

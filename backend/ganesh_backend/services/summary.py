@@ -300,9 +300,14 @@ _service: Optional[SummaryGenerationService] = None
 def get_summary_service() -> SummaryGenerationService:
     global _service
     if _service is None:
+        from ganesh_backend.routers.conversations import get_conversation_service
+        from ganesh_backend.services.summary_embeddings import (
+            get_summary_embedding_store,
+        )
+
         _service = SummaryGenerationService(
-            conversation_store=ConversationStore(),
-            summary_embedding_store=SummaryEmbeddingStore(),
+            conversation_store=get_conversation_service(),
+            summary_embedding_store=get_summary_embedding_store(),
             config=config_service,
         )
     return _service

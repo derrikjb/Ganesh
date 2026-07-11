@@ -117,7 +117,7 @@ def _make_stores(
 
 
 def test_build_context_no_checkpoints_returns_existing_plus_user_msg() -> None:
-    """With no checkpoints, context is existing_messages + new user message."""
+    """With no checkpoints, context is just existing_messages (user msg already included)."""
     conv_store, emb_store = _make_stores(checkpoints=[])
     svc = ContextAssemblyService(conv_store, emb_store, _make_config())
 
@@ -127,7 +127,7 @@ def test_build_context_no_checkpoints_returns_existing_plus_user_msg() -> None:
     ]
     result = svc.build_context("what's up?", "conv-1", existing)
 
-    assert result == existing + [{"role": "user", "content": "what's up?"}]
+    assert result == existing
 
 
 def test_build_context_with_checkpoints_prepends_checkpoint_context() -> None:
@@ -144,7 +144,6 @@ def test_build_context_with_checkpoints_prepends_checkpoint_context() -> None:
 
     assert result[0]["role"] == "system"
     assert "Conversation memory" in result[0]["content"]
-    assert result[-1] == {"role": "user", "content": "more"}
     assert {"role": "user", "content": "hi"} in result
 
 
@@ -437,11 +436,10 @@ def test_all_three_system_messages_prepended_in_correct_order() -> None:
     assert "Referenced earlier conversation segment" in system_msgs[2]["content"]
 
     assert result[len(system_msgs)] == {"role": "user", "content": "existing"}
-    assert result[-1] == {"role": "user", "content": "sql vs nosql"}
 
 
 def test_build_context_preserves_existing_and_appends_user_message() -> None:
-    """existing_messages are preserved verbatim and the new user message is appended."""
+    """existing_messages are preserved verbatim; no user message is appended."""
     conv_store, emb_store = _make_stores(checkpoints=[])
     svc = ContextAssemblyService(conv_store, emb_store, _make_config())
     existing = [
@@ -451,9 +449,7 @@ def test_build_context_preserves_existing_and_appends_user_message() -> None:
     ]
     result = svc.build_context("next question", "conv-1", existing)
 
-    for i, m in enumerate(existing):
-        assert result[len(result) - len(existing) - 1 + i] == m
-    assert result[-1] == {"role": "user", "content": "next question"}
+    assert result == existing
 
 
 def test_checkpoint_context_empty_summaries_skipped() -> None:
