@@ -277,6 +277,8 @@ describe('ProviderSettings', () => {
       .mockResolvedValueOnce(mockResponse({ providers: PROVIDERS }))
       .mockResolvedValueOnce(mockResponse({ models: OPENAI_MODELS }))
       .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
+      .mockResolvedValueOnce(mockResponse({ models: [] }))
+      .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
       .mockResolvedValueOnce(mockResponse({ status: 'ok' }))
       .mockResolvedValueOnce(mockResponse({ ok: true }))
 

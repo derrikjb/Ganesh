@@ -125,6 +125,10 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
       }
       const list = await fetchModels('local')
       setLocalModels(list ?? [])
+      if (list && list.length > 0 && !localModel) {
+        setLocalModel(list[0])
+        await saveLocalEndpoint(localBaseUrl, list[0])
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -142,8 +146,9 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
     } else {
       setModels([])
       setSelectedModel(localModel)
+      void refreshLocalModels()
     }
-  }, [selectedProvider, loadModels, isLocal, localModel])
+  }, [selectedProvider, loadModels, isLocal, localModel, refreshLocalModels])
 
   const handleProviderChange = (provider: string) => {
     setSelectedProvider(provider as ProviderName)
@@ -282,18 +287,27 @@ export function ProviderSettings({ onClose }: ProviderSettingsProps) {
                 <select
                   id="local-model-input"
                   value={localModel}
-                  onChange={(e) => setLocalModel(e.target.value)}
-                  onFocus={refreshLocalModels}
+                  onChange={async (e) => {
+                    const m = e.target.value
+                    setLocalModel(m)
+                    if (localBaseUrl.trim()) {
+                      try {
+                        await saveLocalEndpoint(localBaseUrl, m)
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : String(err))
+                      }
+                    }
+                  }}
                   className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
                   data-testid="local-model-select"
                 >
-                  {localModelLoading && <option value="">Loading…</option>}
-                  {!localModelLoading && localModels.length === 0 && (
-                    <option value="">
-                      {localModel ? localModel : 'No models found — type below'}
-                    </option>
+                  {localModels.length === 0 && !localModelLoading && (
+                    <option value="">No models found — type below</option>
                   )}
-                  {!localModelLoading && localModels.map((m) => (
+                  {localModel && !localModels.includes(localModel) && (
+                    <option value={localModel}>{localModel}</option>
+                  )}
+                  {localModels.map((m) => (
                     <option key={m} value={m}>
                       {m}
                     </option>
