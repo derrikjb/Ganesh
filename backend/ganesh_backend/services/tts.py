@@ -174,9 +174,6 @@ class TTSService:
         return removed
 
     def _local_available(self) -> bool:
-        path = self._active_piper_voice_path() or self._piper_voice_path
-        if not path:
-            return False
         return self._piper_importable()
 
     def _piper_importable(self) -> bool:
