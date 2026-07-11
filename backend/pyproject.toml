@@ -16,7 +16,8 @@ dependencies = [
     "python-multipart",
     "lancedb",
     "mem0ai",
-    "piper-tts",
+    "kokoro-onnx",
+    "soundfile",
     "vaderSentiment",
 ]
 

@@ -49,21 +49,28 @@ class ModelSpec:
 
 REQUIRED_MODELS: dict[str, ModelSpec] = {
     "stt": ModelSpec(
-        name="stt",
+        name="stt.bin",
         url="https://github.com/ganesh-ai/models/releases/download/v0.1/stt.bin",
         checksum="",
         description="Speech-to-text (faster-whisper base)",
         size=0,
     ),
     "tts": ModelSpec(
-        name="tts",
-        url="https://github.com/ganesh-ai/models/releases/download/v0.1/tts.bin",
+        name="kokoro-v1.0.onnx",
+        url="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
         checksum="",
-        description="Text-to-speech (Piper voice)",
+        description="Text-to-speech (Kokoro model)",
+        size=0,
+    ),
+    "voices": ModelSpec(
+        name="voices-v1.0.bin",
+        url="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+        checksum="",
+        description="Text-to-speech (Kokoro voices)",
         size=0,
     ),
     "embeddings": ModelSpec(
-        name="embeddings",
+        name="embeddings.bin",
         url="https://github.com/ganesh-ai/models/releases/download/v0.1/embeddings.bin",
         checksum="",
         description="Sentence embeddings (all-MiniLM-L6-v2)",
@@ -142,10 +149,10 @@ class ModelManager:
         self._tasks: dict[str, "asyncio.Task[object]"] = {}
 
     def _path_for(self, name: str) -> Path:
-        return self._models_dir / f"{name}.bin"
+        return self._models_dir / self._specs[name].name
 
     def _part_path_for(self, name: str) -> Path:
-        return self._models_dir / f"{name}.bin.part"
+        return self._models_dir / f"{self._specs[name].name}.part"
 
     def check_models(self) -> dict[str, bool]:
         """Return ``{name: present_and_checksum_valid}`` for every required model."""

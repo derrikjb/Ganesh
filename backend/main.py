@@ -66,7 +66,7 @@ NATIVE_DEPS: tuple[str, ...] = (
     "yaml",  # PyYAML exposes the `yaml` module, not `pyyaml`
     "lancedb",
     "mem0",
-    "piper",  # piper-tts exposes the `piper` module
+    "kokoro_onnx",  # kokoro-onnx exposes the `kokoro_onnx` module
     "faster_whisper",  # faster-whisper exposes the `faster_whisper` module
     "vaderSentiment",  # pure-Python lexicon sentiment for emotion detection
 )
