@@ -1,11 +1,11 @@
 """Text-to-Speech (TTS) service layer.
 
-Local speech synthesis via Piper (ONNX-runtime neural TTS) with a cloud
+Local speech synthesis via Kokoro (ONNX-runtime neural TTS) with a cloud
 fallback to the ElevenLabs HTTP API when the local voice is unavailable or
 synthesis fails.
 
-``piper`` is imported lazily so this module loads in environments where
-``piper-tts`` is not installed. The loaded ``PiperVoice`` is cached per
+``kokoro_onnx`` is imported lazily so this module loads in environments where
+``kokoro-onnx`` is not installed. The loaded ``Kokoro`` instance is cached per
 instance to avoid re-loading the ONNX model on every request. ElevenLabs
 fallback uses ``httpx`` and resolves its API key from the shared keyring
 store (``elevenlabs_api_key``) with an ``ELEVENLABS_API_KEY`` env fallback.
@@ -16,8 +16,8 @@ from __future__ import annotations
 import io
 import logging
 import os
-import uuid
 import wave
+from pathlib import Path
 from typing import Any, Optional
 
 import httpx
@@ -26,7 +26,9 @@ from ganesh_backend.services.config import config_service
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PIPER_VOICE: str = ""
+DEFAULT_KOKORO_VOICE: str = "af_heart"
+DEFAULT_MODEL_FILENAME: str = "kokoro-v1.0.onnx"
+DEFAULT_VOICES_FILENAME: str = "voices-v1.0.bin"
 
 ELEVENLABS_API_BASE: str = "https://api.elevenlabs.io/v1"
 ELEVENLABS_DEFAULT_VOICE_ID: str = "21m00Tcm4TlvDq8ikWAM"
@@ -42,25 +44,18 @@ class TTSError(RuntimeError):
 
 
 class TTSService:
-    """TTS service: Piper local synthesis with ElevenLabs cloud fallback.
+    """TTS service: Kokoro local synthesis with ElevenLabs cloud fallback.
 
-    Safe to instantiate even when ``piper-tts`` is not installed — the
-    import is deferred until a voice model is actually requested.
+    Safe to instantiate even when ``kokoro-onnx`` is not installed — the
+    import is deferred until a voice is actually requested.
     """
 
     def __init__(
         self,
-        piper_voice_path: Optional[str] = None,
         elevenlabs_voice_id: Optional[str] = None,
         elevenlabs_api_key: Optional[str] = None,
         elevenlabs_model: Optional[str] = None,
     ) -> None:
-        self._piper_voice_path: str = (
-            piper_voice_path
-            or os.environ.get("GANESH_TTS_VOICE", "")
-            or config_service.get_setting("voice.piper_model", "")
-            or DEFAULT_PIPER_VOICE
-        )
         self._elevenlabs_voice_id: str = (
             elevenlabs_voice_id
             or os.environ.get("ELEVENLABS_VOICE_ID", "")
@@ -73,22 +68,30 @@ class TTSService:
             elevenlabs_model or ELEVENLABS_DEFAULT_MODEL
         )
         self._elevenlabs_api_key_override: Optional[str] = elevenlabs_api_key
-        self._voice_cache: dict[str, Any] = {}
+        self._kokoro_cache: dict[str, Any] = {}
 
-    def _piper_voices(self) -> list[dict[str, str]]:
-        voices = config_service.get_setting("voice.piper_voices", [])
-        if not isinstance(voices, list):
-            return []
-        return [v for v in voices if isinstance(v, dict)]
+    @staticmethod
+    def _default_models_dir() -> Path:
+        return Path.home() / ".ganesh" / "models"
 
-    def _active_piper_voice_path(self) -> Optional[str]:
-        active_id = config_service.get_setting("voice.piper_active_voice")
-        if not active_id:
-            return None
-        for v in self._piper_voices():
-            if v.get("id") == active_id:
-                return v.get("path") or None
-        return None
+    def _model_path(self) -> str:
+        configured = config_service.get_setting("voice.tts_model_path", "")
+        if configured:
+            return str(configured)
+        return str(self._default_models_dir() / DEFAULT_MODEL_FILENAME)
+
+    def _voices_path(self) -> str:
+        configured = config_service.get_setting("voice.tts_voices_path", "")
+        if configured:
+            return str(configured)
+        return str(self._default_models_dir() / DEFAULT_VOICES_FILENAME)
+
+    def get_active_voice(self) -> str:
+        """Return the configured active Kokoro voice name (default ``af_heart``)."""
+        name = config_service.get_setting("voice.tts_voice_name", "")
+        if not name:
+            return DEFAULT_KOKORO_VOICE
+        return str(name)
 
     def synthesize(
         self,
@@ -135,18 +138,21 @@ class TTSService:
         return self._local_available() or self._cloud_available()
 
     def list_voices(self) -> list[dict[str, str]]:
-        """Return all configured Piper voices plus the ElevenLabs cloud voice."""
+        """Return available Kokoro voice names plus the ElevenLabs cloud voice."""
         voices: list[dict[str, str]] = []
-        for v in self._piper_voices():
-            path = v.get("path") or ""
-            if path and self._piper_importable():
-                voices.append(
-                    {
-                        "id": v.get("id", path),
-                        "name": v.get("name", "Piper voice"),
-                        "backend": "local",
-                    }
-                )
+        if self._kokoro_importable():
+            try:
+                kokoro = self._load_kokoro()
+                for name in kokoro.get_voices():
+                    voices.append(
+                        {
+                            "id": str(name),
+                            "name": str(name),
+                            "backend": "local",
+                        }
+                    )
+            except Exception as exc:
+                logger.warning("TTS list_voices: could not enumerate Kokoro voices: %s", exc)
         if self._cloud_available():
             voices.append(
                 {
@@ -157,67 +163,61 @@ class TTSService:
             )
         return voices
 
-    def set_active_voice(self, voice_id: str) -> None:
-        """Set ``voice.piper_active_voice`` in config."""
-        config_service.set_setting("voice.piper_active_voice", voice_id)
-
-    def add_voice(self, name: str, path: str) -> dict[str, str]:
-        """Append a new Piper voice to ``voice.piper_voices`` in config."""
-        voice = {"id": str(uuid.uuid4()), "name": name, "path": path}
-        voices = self._piper_voices()
-        voices.append(voice)
-        config_service.set_setting("voice.piper_voices", voices)
-        return voice
-
-    def remove_voice(self, voice_id: str) -> bool:
-        """Remove a Piper voice by id; clears active if it was active."""
-        voices = self._piper_voices()
-        new_voices = [v for v in voices if v.get("id") != voice_id]
-        removed = len(new_voices) != len(voices)
-        if removed:
-            config_service.set_setting("voice.piper_voices", new_voices)
-            active = config_service.get_setting("voice.piper_active_voice")
-            if active == voice_id:
-                config_service.set_setting("voice.piper_active_voice", None)
-        return removed
+    def set_active_voice(self, voice_name: str) -> None:
+        """Set ``voice.tts_voice_name`` in config and clear the Kokoro cache."""
+        config_service.set_setting("voice.tts_voice_name", voice_name)
+        self._kokoro_cache.clear()
 
     def _local_available(self) -> bool:
-        return self._piper_importable()
+        if not self._kokoro_importable():
+            return False
+        model_path = self._model_path()
+        voices_path = self._voices_path()
+        return os.path.isfile(model_path) and os.path.isfile(voices_path)
 
-    def _piper_importable(self) -> bool:
+    @staticmethod
+    def _kokoro_importable() -> bool:
         try:
-            import piper  # noqa: F401
+            import kokoro_onnx  # noqa: F401
         except Exception:
             return False
         return True
 
     def _try_local(self, text: str, voice: Optional[str]) -> Optional[bytes]:
-        model_path = voice or self._active_piper_voice_path() or self._piper_voice_path
-        if not model_path:
+        if not self._kokoro_importable():
+            logger.warning("TTS local synthesis skipped: kokoro_onnx not importable")
+            return None
+        model_path = self._model_path()
+        voices_path = self._voices_path()
+        if not os.path.isfile(model_path) or not os.path.isfile(voices_path):
             logger.warning(
-                "TTS local synthesis skipped: no Piper voice model path configured"
+                "TTS local synthesis skipped: model files missing "
+                "(model=%s, voices=%s)",
+                model_path,
+                voices_path,
             )
             return None
-        if not self._piper_importable():
-            logger.warning("TTS local synthesis skipped: piper package not importable")
-            return None
+        voice_name = voice or self.get_active_voice()
         try:
-            piper_voice = self._load_piper_voice(model_path)
-            return self._render_piper_wav(piper_voice, text)
+            kokoro = self._load_kokoro()
+            return self._render_kokoro_wav(kokoro, text, voice_name)
         except Exception as exc:
             logger.exception("TTS local synthesis failed: %s", exc)
             return None
 
-    def _load_piper_voice(self, model_path: str) -> Any:
-        cached = self._voice_cache.get(model_path)
+    def _load_kokoro(self) -> Any:
+        model_path = self._model_path()
+        cached = self._kokoro_cache.get(model_path)
         if cached is not None:
             return cached
-        import piper
+        from kokoro_onnx import Kokoro
 
         use_cuda = self._resolve_use_cuda()
-        voice = piper.PiperVoice.load(model_path, use_cuda=use_cuda)
-        self._voice_cache[model_path] = voice
-        return voice
+        if use_cuda:
+            logger.info("TTS local: CUDA execution provider available")
+        kokoro = Kokoro(model_path, self._voices_path())
+        self._kokoro_cache[model_path] = kokoro
+        return kokoro
 
     @staticmethod
     def _resolve_use_cuda() -> bool:
@@ -229,25 +229,25 @@ class TTSService:
         # auto: use CUDA if onnxruntime has the CUDA execution provider
         try:
             import onnxruntime
+
             return "CUDAExecutionProvider" in onnxruntime.get_available_providers()
         except Exception:
             return False
 
-    def _render_piper_wav(self, piper_voice: Any, text: str) -> bytes:
-        cfg = getattr(piper_voice, "config", None)
-        sample_rate = getattr(cfg, "sample_rate", 22050) if cfg else 22050
+    def _render_kokoro_wav(
+        self,
+        kokoro: Any,
+        text: str,
+        voice_name: str,
+    ) -> bytes:
+        import soundfile as sf
 
-        import numpy as np
-
-        pcm_chunks: list[bytes] = []
-        for chunk in piper_voice.synthesize(text):
-            audio = getattr(chunk, "audio_int16_array", None)
-            if audio is None and isinstance(chunk, tuple):
-                audio = chunk[0]
-            pcm_chunks.append(np.asarray(audio, dtype=np.int16).tobytes())
-
-        pcm = b"".join(pcm_chunks)
-        return _wav_bytes(pcm, sample_rate)
+        samples, sample_rate = kokoro.create(
+            text, voice=voice_name, speed=1.0, lang="en-us"
+        )
+        buf = io.BytesIO()
+        sf.write(buf, samples, sample_rate, format="WAV", subtype="PCM_16")
+        return buf.getvalue()
 
     def _cloud_available(self) -> bool:
         return bool(self._resolve_elevenlabs_api_key())
