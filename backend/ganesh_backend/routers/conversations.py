@@ -2,17 +2,21 @@
 
 Endpoints
 ---------
-POST   /api/conversations                — create conversation
-GET    /api/conversations                — list conversations
-GET    /api/conversations/search        — semantic search (?q=)
-GET    /api/conversations/{id}           — get conversation with messages
-POST   /api/conversations/{id}/export    — export (json|markdown)
-DELETE /api/conversations/{id}           — delete conversation
-POST   /api/conversations/{id}/messages  — append a message
+POST   /api/conversations                              — create conversation
+GET    /api/conversations                              — list conversations
+GET    /api/conversations/search                       — semantic search (?q=)
+GET    /api/conversations/{id}                         — get conversation with messages
+POST   /api/conversations/{id}/export                  — export (json|markdown)
+DELETE /api/conversations/{id}                         — delete conversation
+POST   /api/conversations/{id}/messages                — append a message
+POST   /api/conversations/{id}/close                   — close + summarize
+GET    /api/conversations/{id}/checkpoints              — list checkpoints
+GET    /api/conversations/{id}/checkpoints/{seq}/messages — checkpoint segment
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Optional
@@ -22,6 +26,8 @@ from pydantic import BaseModel, Field
 
 from ganesh_backend.embeddings import create_default_embedder
 from ganesh_backend.services.conversations import ConversationStore
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -89,12 +95,25 @@ class ConversationSummary(BaseModel):
     created_at: str
     updated_at: str
     message_count: int
+    summary: Optional[str] = None
+    status: str = "active"
+    closed_at: Optional[str] = None
 
 
 class MessageOut(BaseModel):
     id: str
     role: str
     content: str
+    created_at: str
+
+
+class CheckpointOut(BaseModel):
+    id: str
+    conversation_id: str
+    sequence_number: int
+    summary: str
+    start_message_id: Optional[str] = None
+    end_message_id: Optional[str] = None
     created_at: str
 
 
@@ -106,6 +125,10 @@ class ConversationDetail(BaseModel):
     updated_at: str
     messages: list[MessageOut]
     message_count: int
+    summary: Optional[str] = None
+    status: str = "active"
+    closed_at: Optional[str] = None
+    checkpoints: list[CheckpointOut] = []
 
 
 class ListResponse(BaseModel):
@@ -128,6 +151,13 @@ class AddMessageResponse(BaseModel):
 class ExportResponse(BaseModel):
     format: str
     content: str
+
+
+class CloseResponse(BaseModel):
+    conversation_id: str
+    summary: Optional[str] = None
+    status: str
+    checkpoint_count: int
 
 
 @router.post("", response_model=CreateResponse, status_code=201)
@@ -208,3 +238,90 @@ async def add_message(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return AddMessageResponse(id=msg_id)
+
+
+@router.post(
+    "/{conversation_id}/close",
+    response_model=CloseResponse,
+)
+async def close_conversation_endpoint(
+    conversation_id: str,
+) -> CloseResponse:
+    service = get_conversation_service()
+    conv = service.get_conversation(conversation_id)
+    if conv is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Conversation {conversation_id} not found",
+        )
+
+    if conv["status"] == "closed":
+        return CloseResponse(
+            conversation_id=conversation_id,
+            summary=conv.get("summary"),
+            status="closed",
+            checkpoint_count=service.get_checkpoint_count(conversation_id),
+        )
+
+    try:
+        from ganesh_backend.services.summary import get_summary_service
+
+        summary_service = get_summary_service()
+        summary_service.generate_checkpoint(conversation_id)
+        summary = summary_service.generate_conversation_summary(conversation_id)
+    except Exception:
+        logger.exception(
+            "Summary generation failed for conversation %s; closing without summary",
+            conversation_id,
+        )
+        service.close_conversation(conversation_id)
+        summary = None
+
+    status = service.get_conversation_status(conversation_id) or "closed"
+    checkpoint_count = service.get_checkpoint_count(conversation_id)
+    return CloseResponse(
+        conversation_id=conversation_id,
+        summary=summary,
+        status=status,
+        checkpoint_count=checkpoint_count,
+    )
+
+
+@router.get(
+    "/{conversation_id}/checkpoints",
+    response_model=list[CheckpointOut],
+)
+async def get_checkpoints_endpoint(
+    conversation_id: str,
+) -> list[CheckpointOut]:
+    service = get_conversation_service()
+    if service.get_conversation(conversation_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Conversation {conversation_id} not found",
+        )
+    checkpoints = service.get_checkpoints(conversation_id)
+    return [CheckpointOut(**c) for c in checkpoints]
+
+
+@router.get(
+    "/{conversation_id}/checkpoints/{seq}/messages",
+    response_model=list[MessageOut],
+)
+async def get_checkpoint_messages_endpoint(
+    conversation_id: str,
+    seq: int,
+) -> list[MessageOut]:
+    service = get_conversation_service()
+    checkpoint = service.get_checkpoint(conversation_id, seq)
+    if checkpoint is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Checkpoint {seq} not found for conversation {conversation_id}",
+        )
+    messages = service.get_messages_between(
+        conversation_id,
+        checkpoint.get("start_message_id"),
+        checkpoint.get("end_message_id"),
+    )
+    return [MessageOut(**m) for m in messages]
