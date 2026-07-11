@@ -313,6 +313,26 @@ async def update_voice_settings(req: VoiceSettingsUpdate) -> Any:
 
 @router.post("/piper-voices")
 async def add_piper_voice(req: AddPiperVoiceRequest) -> dict[str, Any]:
+    import os
+
+    onnx_path = req.path
+    json_path = onnx_path + ".json"
+
+    if not os.path.isfile(onnx_path):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Voice model file not found: {onnx_path}",
+        )
+    if not os.path.isfile(json_path):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Voice config file not found: {json_path}. "
+                "Piper requires both <name>.onnx and <name>.onnx.json. "
+                "If your config is named <name>-onnx.json, rename it to <name>.onnx.json."
+            ),
+        )
+
     service = get_tts_service()
     voice = service.add_voice(req.name, req.path)
     return voice

@@ -110,7 +110,8 @@ def test_cloud_fallback():
     mock_client.__enter__.return_value = mock_client
     mock_client.__exit__.return_value = False
     mock_client.post.return_value = fake_response
-    with patch("ganesh_backend.services.tts.httpx.Client", return_value=mock_client):
+    with patch("ganesh_backend.services.tts.httpx.Client", return_value=mock_client), \
+         patch.object(service, "_try_local", return_value=None):
         audio_bytes, content_type, source = service.synthesize("hello")
 
     assert source == "cloud"
