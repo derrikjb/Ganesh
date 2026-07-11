@@ -68,6 +68,9 @@ export function useTTS(): UseTTSReturn {
 
   const streamTextRef = useRef('')
   const streamSynthesizedRef = useRef(0)
+  const streamIsFinalRef = useRef(false)
+  const streamProcessingRef = useRef(false)
+  const stopGenerationRef = useRef(0)
   const playbackQueueRef = useRef<Blob[]>([])
   const isPlayingQueueRef = useRef(false)
 
@@ -162,27 +165,54 @@ export function useTTS(): UseTTSReturn {
       if (!ttsEnabledRef.current) return
 
       streamTextRef.current = text
-      const start = streamSynthesizedRef.current
-      if (text.length <= start && !isFinal) return
+      streamIsFinalRef.current = isFinal
 
-      if (isFinal) {
-        const remaining = text.slice(start)
-        if (remaining.trim()) {
-          const blob = await synthesizeChunk(remaining)
-          if (blob) enqueueBlob(blob)
+      if (streamProcessingRef.current) return
+      streamProcessingRef.current = true
+
+      const myGeneration = stopGenerationRef.current
+
+      try {
+        while (true) {
+          if (myGeneration !== stopGenerationRef.current) return
+
+          const currentText = streamTextRef.current
+          const start = streamSynthesizedRef.current
+          const final = streamIsFinalRef.current
+
+          if (currentText.length <= start) {
+            if (final) {
+              streamSynthesizedRef.current = currentText.length
+            }
+            break
+          }
+
+          const newPortion = currentText.slice(start)
+
+          if (final) {
+            if (newPortion.trim()) {
+              const blob = await synthesizeChunk(newPortion)
+              if (blob && myGeneration === stopGenerationRef.current) {
+                enqueueBlob(blob)
+              }
+            }
+            streamSynthesizedRef.current = currentText.length
+            break
+          }
+
+          const bp = findBreakpoint(newPortion, newPortion.length)
+          if (bp <= 0) break
+
+          const chunk = newPortion.slice(0, bp)
+          const blob = await synthesizeChunk(chunk)
+          if (blob && myGeneration === stopGenerationRef.current) {
+            enqueueBlob(blob)
+          }
+          streamSynthesizedRef.current = start + bp
         }
-        streamSynthesizedRef.current = text.length
-        return
+      } finally {
+        streamProcessingRef.current = false
       }
-
-      const newPortion = text.slice(start)
-      const bp = findBreakpoint(newPortion, newPortion.length)
-      if (bp <= 0) return
-
-      const chunk = newPortion.slice(0, bp)
-      const blob = await synthesizeChunk(chunk)
-      if (blob) enqueueBlob(blob)
-      streamSynthesizedRef.current = start + bp
     },
     [synthesizeChunk, enqueueBlob],
   )
@@ -199,8 +229,11 @@ export function useTTS(): UseTTSReturn {
   }, [synthesizeChunk, enqueueBlob])
 
   const resetStream = useCallback((): void => {
+    stopGenerationRef.current++
     streamTextRef.current = ''
     streamSynthesizedRef.current = 0
+    streamIsFinalRef.current = false
+    streamProcessingRef.current = false
     playbackQueueRef.current = []
     isPlayingQueueRef.current = false
   }, [])
@@ -212,6 +245,8 @@ export function useTTS(): UseTTSReturn {
       resetStream()
       audioRef.current?.pause()
       audioRef.current = null
+
+      const myGeneration = stopGenerationRef.current
 
       if (import.meta.env.DEV) console.log('[TTS] speak request:', text.slice(0, 100))
 
@@ -231,7 +266,9 @@ export function useTTS(): UseTTSReturn {
         if (import.meta.env.DEV)
           console.log('[TTS] speak response:', blob.size, 'bytes, type:', blob.type)
 
-        enqueueBlob(blob)
+        if (myGeneration === stopGenerationRef.current) {
+          enqueueBlob(blob)
+        }
       } catch (err) {
         if (import.meta.env.DEV) console.error('[TTS] speak failed:', err)
         setIsSpeaking(false)
@@ -241,12 +278,15 @@ export function useTTS(): UseTTSReturn {
   )
 
   const stop = useCallback((): void => {
+    stopGenerationRef.current++
     audioRef.current?.pause()
     audioRef.current = null
     playbackQueueRef.current = []
     isPlayingQueueRef.current = false
     streamTextRef.current = ''
     streamSynthesizedRef.current = 0
+    streamIsFinalRef.current = false
+    streamProcessingRef.current = false
     setIsSpeaking(false)
   }, [])
 
@@ -266,6 +306,8 @@ export function useTTS(): UseTTSReturn {
   const testChime = useCallback(async (): Promise<void> => {
     if (import.meta.env.DEV) console.log('[TTS] chime at volume:', volumeRef.current)
 
+    const myGeneration = stopGenerationRef.current
+
     try {
       const response = await sidecarFetch('/api/voice/chime', {
         method: 'POST',
@@ -278,7 +320,9 @@ export function useTTS(): UseTTSReturn {
       }
 
       const blob = await response.blob()
-      await playBlob(blob)
+      if (myGeneration === stopGenerationRef.current) {
+        await playBlob(blob)
+      }
     } catch (err) {
       if (import.meta.env.DEV) console.error('[TTS] chime failed:', err)
       setIsSpeaking(false)

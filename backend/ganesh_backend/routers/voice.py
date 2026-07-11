@@ -10,6 +10,7 @@ Exposes:
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 import tempfile
@@ -140,8 +141,8 @@ async def synthesize(req: SynthesizeRequest) -> Response:
 
     service = get_tts_service()
     try:
-        audio_bytes, content_type, _source = service.synthesize(
-            req.text, voice=req.voice
+        audio_bytes, content_type, _source = await asyncio.to_thread(
+            service.synthesize, req.text, req.voice
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
