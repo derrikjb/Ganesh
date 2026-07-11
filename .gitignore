@@ -48,3 +48,5 @@ backend/:memory:/
 **/.sisyphus/
 !**/.sisyphus/plans/
 !**/.sisyphus/notepads/
+src-tauri/:memory:/
+-
