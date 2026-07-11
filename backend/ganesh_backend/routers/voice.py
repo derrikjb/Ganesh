@@ -244,7 +244,18 @@ class VoiceSettingsResponse(BaseModel):
     input_device: Optional[str]
     stt_language: Optional[str]
     deepgram_model: str
+    deepgram_url: str
+    deepgram_smart_format: bool
+    deepgram_punctuate: bool
+    deepgram_diarize: bool
     elevenlabs_voice_id: str
+    elevenlabs_model: str
+    elevenlabs_stability: Optional[float]
+    elevenlabs_similarity_boost: Optional[float]
+    elevenlabs_style: Optional[float]
+    elevenlabs_speed: Optional[float]
+    kokoro_speed: float
+    kokoro_lang: str
     tts_voice_name: str
     tts_voices: list[str]
     stt_local_available: bool
@@ -264,7 +275,18 @@ class VoiceSettingsUpdate(BaseModel):
     input_device: Optional[str] = None
     stt_language: Optional[str] = None
     deepgram_model: Optional[str] = None
+    deepgram_url: Optional[str] = None
+    deepgram_smart_format: Optional[bool] = None
+    deepgram_punctuate: Optional[bool] = None
+    deepgram_diarize: Optional[bool] = None
     elevenlabs_voice_id: Optional[str] = None
+    elevenlabs_model: Optional[str] = None
+    elevenlabs_stability: Optional[float] = None
+    elevenlabs_similarity_boost: Optional[float] = None
+    elevenlabs_style: Optional[float] = None
+    elevenlabs_speed: Optional[float] = None
+    kokoro_speed: Optional[float] = None
+    kokoro_lang: Optional[str] = None
     tts_voice_name: Optional[str] = None
 
 
@@ -295,9 +317,20 @@ def _build_voice_settings() -> VoiceSettingsResponse:
         input_device=config_service.get_setting("voice.input_device"),
         stt_language=config_service.get_setting("voice.stt_language"),
         deepgram_model=config_service.get_setting("voice.deepgram_model", "nova-2"),
+        deepgram_url=config_service.get_setting("voice.deepgram_url", "https://api.deepgram.com/v1/listen"),
+        deepgram_smart_format=config_service.get_setting("voice.deepgram_smart_format", True),
+        deepgram_punctuate=config_service.get_setting("voice.deepgram_punctuate", True),
+        deepgram_diarize=config_service.get_setting("voice.deepgram_diarize", False),
         elevenlabs_voice_id=config_service.get_setting(
             "voice.elevenlabs_voice_id", "21m00Tcm4TlvDq8ikWAM"
         ),
+        elevenlabs_model=config_service.get_setting("voice.elevenlabs_model", "eleven_multilingual_v2"),
+        elevenlabs_stability=config_service.get_setting("voice.elevenlabs_stability", None),
+        elevenlabs_similarity_boost=config_service.get_setting("voice.elevenlabs_similarity_boost", None),
+        elevenlabs_style=config_service.get_setting("voice.elevenlabs_style", None),
+        elevenlabs_speed=config_service.get_setting("voice.elevenlabs_speed", None),
+        kokoro_speed=config_service.get_setting("voice.kokoro_speed", 1.0),
+        kokoro_lang=config_service.get_setting("voice.kokoro_lang", "en-us"),
         tts_voice_name=config_service.get_setting("voice.tts_voice_name", "af_heart"),
         tts_voices=tts_voices,
         stt_local_available=stt_service.is_local_available(),

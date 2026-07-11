@@ -354,25 +354,208 @@ If `CUDAExecutionProvider` is missing from the providers list, the CUDA Toolkit 
 
 ```yaml
 memory:
-  backend: lancedb
-  embedding_model: all-MiniLM-L6-v2
-  max_memories_per_query: 10
+  enabled: true
+  max_memories: 1000
+```
+
+### LLM Settings
+
+All LLM generation parameters are configurable. Defaults match the provider's standard behavior.
+
+```yaml
+llm:
+  provider: openai                      # openai | anthropic | google | openrouter | local
+  model: gpt-4o-mini                    # default model (used when not overridden per-request)
+  local:
+    base_url: http://localhost:11434/v1  # Ollama / LM Studio / llama.cpp endpoint
+    model: null                          # local model name (null = use llm.model or "local-model")
+  models:                               # override the static provider model lists
+    openai: [gpt-4o-mini, gpt-4o, gpt-4-turbo, gpt-3.5-turbo]
+    anthropic: [claude-3-5-sonnet-20240620, claude-3-5-haiku-20241022, claude-3-opus-20240229]
+    google: [gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash]
+    openrouter: [openai/gpt-4o-mini, anthropic/claude-3.5-sonnet, google/gemini-2.0-flash-001]
+    local: []
+  temperature: 0.7                      # 0.0-2.0
+  max_tokens: 1000
+  top_p: 1.0
+  frequency_penalty: 0.0                # -2.0 to 2.0
+  presence_penalty: 0.0                 # -2.0 to 2.0
+  timeout: 10.0                         # seconds for model list fetches
+  test_max_tokens: 1                    # tokens used by Test Connection
+```
+
+### Voice Settings
+
+Voice settings are configured in-app via the Voice Settings panel (common options) or via config.yaml (all options):
+
+```yaml
+voice:
+  stt_engine: local              # "local" (faster-whisper) or "cloud" (Deepgram)
+  tts_engine: local              # "local" (Kokoro) or "cloud" (ElevenLabs)
+  whisper_model: tiny            # tiny|base|small|medium|large|large-v3|large-v3-turbo|distil-large-v3
+  stt_device: auto              # "auto" | "cpu" | "cuda"
+  tts_device: auto              # "auto" | "cpu" | "cuda"
+  activation_mode: click_to_talk # "click_to_talk" | "push_to_talk" | "vad"
+  input_device: null            # PulseAudio source name, or null for default
+  stt_language: null            # ISO-639-1 code (e.g. "en") or null for auto-detect
+
+  # Deepgram (cloud STT)
+  deepgram_model: nova-2
+  deepgram_url: https://api.deepgram.com/v1/listen
+  deepgram_smart_format: true
+  deepgram_punctuate: true
+  deepgram_diarize: false
+  stt_timeout: 30.0
+
+  # Kokoro (local TTS)
+  tts_voice_name: af_heart
+  tts_model_path: ""             # empty = ~/.ganesh/models/kokoro-v1.0.onnx
+  tts_voices_path: ""            # empty = ~/.ganesh/models/voices-v1.0.bin
+  kokoro_speed: 1.0              # 0.5-2.0 (speech rate multiplier)
+  kokoro_lang: en-us             # phoneme language
+
+  # ElevenLabs (cloud TTS)
+  elevenlabs_voice_id: 21m00Tcm4TlvDq8ikWAM
+  elevenlabs_model: eleven_multilingual_v2
+  elevenlabs_api_base: https://api.elevenlabs.io/v1
+  elevenlabs_stability: null     # 0.0-1.0 (null = don't send)
+  elevenlabs_similarity_boost: null  # 0.0-1.0
+  elevenlabs_style: null         # 0.0-1.0
+  elevenlabs_speed: null         # 0.7-1.2
+  tts_timeout: 30.0
+
+  # Audio capture
+  max_upload_bytes: 26214400    # 25 MiB upload cap
+  audio:
+    sample_rate: 16000
+    channels: 1
+    sample_width: 2
+
+  # Test chime
+  chime:
+    sample_rate: 22050
+    duration: 0.3               # seconds
+    frequency: 440.0           # Hz
+    fade_ms: 10                # fade in/out duration
+```
+
+### Embeddings
+
+```yaml
+embeddings:
+  model: all-MiniLM-L6-v2      # sentence-transformers model name
+  dimension: 384               # embedding vector dimensionality
+  lancedb_uri: null            # null = ~/.ganesh/data/lancedb
 ```
 
 ### Personality Matrix
 
 ```yaml
 personality:
-  base_traits:
-    helpfulness: 0.8
-    creativity: 0.6
-    formality: 0.4
-  shift_bounds:
-    min: 0.2
-    max: 1.0
+  traits:
+    formality: 0.0       # -1.0 (casual) to 1.0 (formal)
+    verbosity: 0.0       # -1.0 (concise) to 1.0 (verbose)
+    warmth: 0.5          # 0.0 (cold) to 1.0 (warm)
+    humor: 0.3           # 0.0 (serious) to 1.0 (playful)
+    assertiveness: 0.0   # -1.0 (deferential) to 1.0 (assertive)
+  locked: []             # traits that won't shift (e.g. ["humor"])
+  mutation_rate_cap: 0.15   # max trait shift per turn
+  mutation_scale: 0.05      # scaling factor for context-driven shifts
+  trait_bounds:
+    formality: [-1.0, 1.0]
+    verbosity: [-1.0, 1.0]
+    warmth: [0.0, 1.0]
+    humor: [0.0, 1.0]
+    assertiveness: [-1.0, 1.0]
 ```
 
-Traits shift dynamically during conversation but stay within the configured bounds.
+### Conversation Memory (Checkpoint System)
+
+```yaml
+conversation_memory:
+  enabled: true
+  checkpoint_gap_seconds: 300      # gap that triggers a checkpoint (5 min)
+  min_messages_for_checkpoint: 2
+  max_summaries_injected: 3        # top-k cross-day summaries injected
+  full_pull_threshold: 0.85        # similarity for full transcript pull
+  max_transcript_messages: 50
+  adjacent_segments: 1             # adjacent checkpoints to pull
+  summary_provider: null           # null = use same provider as chat
+  summary_model: null              # null = use default model for provider
+  checkpoint_max_tokens: 200       # target length for checkpoint summaries
+  conversation_max_tokens: 500     # target length for conversation summaries
+```
+
+### Retrieval
+
+```yaml
+retrieval:
+  cross_day_threshold: 0.3   # min similarity for cross-day summary injection
+  search_limit: 5            # max results from embedding search
+```
+
+### Continuity
+
+```yaml
+continuity:
+  welcome_threshold_seconds: 300   # gap before welcome-back message
+```
+
+### Search
+
+```yaml
+search:
+  backend: duckduckgo
+  url: https://html.duckduckgo.com/html/
+  default_results: 5
+  max_results: 20
+  timeout: 10.0
+  user_agent: "Mozilla/5.0 ..."
+```
+
+### Patterns
+
+```yaml
+patterns:
+  detection_threshold: 3       # min occurrences before suggesting
+  suggestion_confidence: 0.7   # min confidence to suggest
+  accept_delta: 0.1            # confidence boost on accept
+  decline_delta: -0.2          # confidence penalty on decline
+```
+
+### Conversations
+
+```yaml
+conversations:
+  auto_title_max_len: 50       # max chars for auto-generated titles
+  default_title: New Conversation
+```
+
+### Model Download
+
+```yaml
+model_download:
+  chunk_size: 65536            # download chunk size in bytes
+  disk_space_safety_multiplier: 2  # warn if free space < N * model size
+```
+
+### Summary Embeddings
+
+```yaml
+summary_embeddings:
+  checkpoint_collection: ganesh_checkpoint_summaries
+  conversation_collection: ganesh_conversation_summaries
+  pool_limit_multiplier: 10    # pool = max(search_limit * this, pool_limit_min)
+  pool_limit_min: 50
+```
+
+### Update Settings
+
+```yaml
+update:
+  channel: stable    # stable | beta
+  auto_check: true   # check for updates on launch
+```
 
 ## Building from Source
 
