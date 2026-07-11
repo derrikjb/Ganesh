@@ -6,6 +6,25 @@ import type {
   ExportFormat,
 } from '../types/conversations'
 
+function formatConversationDate(isoStr: string): string {
+  const date = new Date(isoStr)
+  const now = new Date()
+  const sameDay = date.toDateString() === now.toDateString()
+  if (sameDay) {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday'
+  }
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000)
+  if (diffDays < 7) {
+    return date.toLocaleDateString('en-US', { weekday: 'short' })
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 interface ConversationHistoryProps {
   onSelect: (conversation: ConversationDetail) => void
   refreshKey?: number
@@ -175,8 +194,23 @@ export function ConversationHistory({ onSelect, refreshKey = 0 }: ConversationHi
                 <div className="text-sm text-text-primary truncate" data-testid={`conversation-title-${conv.id}`}>
                   {conv.title}
                 </div>
-                <div className="text-xs text-text-muted mt-0.5">
-                  {conv.message_count} message{conv.message_count === 1 ? '' : 's'}
+                <div className="text-xs text-text-muted mt-0.5 flex items-center gap-2">
+                  <span>{conv.message_count} message{conv.message_count === 1 ? '' : 's'}</span>
+                  {conv.updated_at && (
+                    <span className="text-text-muted/70">
+                      {formatConversationDate(conv.updated_at)}
+                    </span>
+                  )}
+                  {conv.status === 'closed' && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-bg-tertiary text-text-muted border border-border">
+                      closed
+                    </span>
+                  )}
+                  {conv.summary && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-accent/10 text-accent border border-accent/20">
+                      summarized
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
