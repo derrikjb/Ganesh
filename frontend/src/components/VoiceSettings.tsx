@@ -1,14 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { open } from '@tauri-apps/plugin-dialog'
 import { invoke } from '@tauri-apps/api/core'
 import { sidecarFetch } from '../api'
 import { useTTS } from '../hooks/useTTS'
-
-interface PiperVoice {
-  id: string
-  name: string
-  path: string
-}
 
 interface VoiceSettingsResponse {
   stt_engine: 'local' | 'cloud'
@@ -19,8 +12,8 @@ interface VoiceSettingsResponse {
   tts_device: string
   deepgram_model: string
   elevenlabs_voice_id: string
-  piper_voices: PiperVoice[]
-  piper_active_voice: string | null
+  tts_voice_name: string
+  tts_voices: string[]
   stt_local_available: boolean
   stt_cloud_available: boolean
   tts_local_available: boolean
@@ -54,31 +47,6 @@ async function saveVoiceSettings(updates: Partial<VoiceSettingsResponse>): Promi
   return (await res.json()) as VoiceSettingsResponse
 }
 
-async function addPiperVoice(name: string, path: string): Promise<PiperVoice> {
-  const res = await sidecarFetch('/api/voice/piper-voices', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, path }),
-  })
-  if (!res.ok) throw new Error(`Failed to add voice: ${res.status}`)
-  return (await res.json()) as PiperVoice
-}
-
-async function removePiperVoice(id: string): Promise<void> {
-  const res = await sidecarFetch(`/api/voice/piper-voices/${id}`, {
-    method: 'DELETE',
-  })
-  if (!res.ok) throw new Error(`Failed to remove voice: ${res.status}`)
-}
-
-async function activatePiperVoice(id: string): Promise<VoiceSettingsResponse> {
-  const res = await sidecarFetch(`/api/voice/piper-voices/${id}/activate`, {
-    method: 'POST',
-  })
-  if (!res.ok) throw new Error(`Failed to activate voice: ${res.status}`)
-  return (await res.json()) as VoiceSettingsResponse
-}
-
 async function saveApiKey(provider: string, apiKey: string): Promise<void> {
   const res = await sidecarFetch(`/api/voice/keys/${provider}`, {
     method: 'POST',
@@ -106,8 +74,6 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const [elevenlabsVoiceId, setElevenlabsVoiceId] = useState('')
   const [showDeepgramKey, setShowDeepgramKey] = useState(false)
   const [showElevenlabsKey, setShowElevenlabsKey] = useState(false)
-  const [newVoiceName, setNewVoiceName] = useState('')
-  const [newVoicePath, setNewVoicePath] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -304,48 +270,6 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
     }
   }
 
-  const handleAddVoice = async () => {
-    if (!newVoiceName.trim() || !newVoicePath.trim()) {
-      setError('Enter both a name and path for the voice.')
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      await addPiperVoice(newVoiceName, newVoicePath)
-      setNewVoiceName('')
-      setNewVoicePath('')
-      await loadSettings()
-      setSuccess('Voice added.')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleRemoveVoice = async (id: string) => {
-    setError(null)
-    try {
-      await removePiperVoice(id)
-      await loadSettings()
-      setSuccess('Voice removed.')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  const handleActivateVoice = async (id: string) => {
-    setError(null)
-    try {
-      const updated = await activatePiperVoice(id)
-      setSettings(updated)
-      setSuccess('Voice activated.')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
   const handleActivationModeChange = async (mode: 'click_to_talk' | 'push_to_talk' | 'vad') => {
     setActivationMode(mode)
     setError(null)
@@ -357,9 +281,6 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
-
-  const piperVoices = settings?.piper_voices ?? []
-  const activeVoiceId = settings?.piper_active_voice ?? null
 
   return (
     <div
@@ -788,118 +709,28 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
                 </select>
               </div>
               <div>
-                <h4 className="mb-2 text-sm font-medium text-text-primary">Piper Voices</h4>
-                {piperVoices.length === 0 && (
-                  <p className="text-sm text-text-muted">No voices configured.</p>
-                )}
-                {piperVoices.length > 0 && (
-                  <ul className="space-y-2">
-                    {piperVoices.map((voice) => (
-                      <li
-                        key={voice.id}
-                        className="flex items-center justify-between rounded border border-border-primary bg-bg-primary px-3 py-2"
-                        data-testid={`piper-voice-${voice.id}`}
-                      >
-                        <div className="flex-1">
-                          <span className="text-sm text-text-primary">{voice.name}</span>
-                          <span className="ml-2 text-xs text-text-muted">{voice.path}</span>
-                          {voice.id === activeVoiceId && (
-                            <span className="ml-2 rounded bg-green-500/10 px-1.5 py-0.5 text-xs text-status-success">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          {voice.id !== activeVoiceId && (
-                            <button
-                              type="button"
-                              onClick={() => handleActivateVoice(voice.id)}
-                              className="rounded border border-border-primary px-2 py-1 text-xs text-text-secondary hover:text-text-primary"
-                              data-testid={`activate-voice-${voice.id}`}
-                            >
-                              Select
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveVoice(voice.id)}
-                            className="rounded border border-red-500 px-2 py-1 text-xs text-status-error hover:bg-red-500/10"
-                            data-testid={`remove-voice-${voice.id}`}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="rounded border border-border-primary p-3">
-                <h4 className="mb-2 text-sm font-medium text-text-primary">Add Voice</h4>
-                <div className="space-y-2">
-                  <div>
-                    <label
-                      htmlFor="new-voice-name"
-                      className="mb-1 block text-xs text-text-secondary"
-                    >
-                      Name
-                    </label>
-                    <input
-                      id="new-voice-name"
-                      type="text"
-                      value={newVoiceName}
-                      onChange={(e) => setNewVoiceName(e.target.value)}
-                      placeholder="e.g. en-us-lessac"
-                      className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
-                      data-testid="new-voice-name-input"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="new-voice-path"
-                      className="mb-1 block text-xs text-text-secondary"
-                    >
-                      Voice File
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        id="new-voice-path"
-                        type="text"
-                        value={newVoicePath}
-                        onChange={(e) => setNewVoicePath(e.target.value)}
-                        placeholder="Select a .onnx voice file"
-                        readOnly
-                        className="flex-1 rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
-                        data-testid="new-voice-path-input"
-                      />
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const selected = await open({
-                            filters: [{ name: 'Piper Voice', extensions: ['onnx'] }],
-                          })
-                          if (typeof selected === 'string') {
-                            setNewVoicePath(selected)
-                          }
-                        }}
-                        className="rounded border border-border-primary px-3 py-2 text-sm text-text-secondary hover:text-text-primary"
-                        data-testid="browse-voice-button"
-                      >
-                        Browse
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddVoice}
-                    disabled={saving || !newVoiceName.trim() || !newVoicePath.trim()}
-                    className="rounded bg-accent px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
-                    data-testid="add-voice-button"
-                  >
-                    {saving ? 'Adding…' : 'Add Voice'}
-                  </button>
-                </div>
+                <label
+                  htmlFor="tts-voice-select"
+                  className="mb-1 block text-sm font-medium text-text-primary"
+                >
+                  Voice
+                </label>
+                <select
+                  id="tts-voice-select"
+                  value={settings?.tts_voice_name ?? 'af_heart'}
+                  onChange={async (e) => {
+                    const updated = await saveVoiceSettings({ tts_voice_name: e.target.value })
+                    setSettings(updated)
+                  }}
+                  className="w-full rounded border border-border-primary bg-bg-primary px-3 py-2 text-sm text-text-primary"
+                  data-testid="tts-voice-select"
+                >
+                  {(settings?.tts_voices ?? ['af_heart']).map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           )}
