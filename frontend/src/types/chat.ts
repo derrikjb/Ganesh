@@ -29,3 +29,19 @@ export interface UseChatReturn {
   clearMessages: () => void
   loadConversation: (conv: { id: string; messages: Array<{ role: string; content: string }> }) => void
 }
+
+export interface ChatRequest {
+  messages: ChatMessage[]
+  provider?: string
+  model?: string | null
+  stream?: boolean
+  conversation_id?: string | null
+  profile_id?: string | null
+}
+
+export interface ChatResponse {
+  provider: string
+  model: string
+  content: string
+  conversation_id: string
+}

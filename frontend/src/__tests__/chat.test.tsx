@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
 import '@testing-library/jest-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, renderHook, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, renderHook, cleanup, act } from '@testing-library/react'
 import { ChatMessage } from '../components/ChatMessage'
 import { ChatInput } from '../components/ChatInput'
 import { AccessibilityProvider } from '../contexts/AccessibilityContext'
@@ -248,5 +248,207 @@ describe('Chat streaming', () => {
       expect(assistantMsg?.content).toBe('Hello World')
       expect(assistantMsg?.status).toBe('done')
     }, { timeout: 3000 })
+  })
+
+  it('sends conversation_id in request body (null when no conversation)', async () => {
+    const mockReader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: conversation\ndata: {"conversation_id": "conv-abc"}\n\n'),
+        })
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('data: {"content": "Hi"}\n\n'),
+        })
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: done\ndata: {"done": true}\n\n'),
+        })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+    }
+
+    mockSidecarFetch.mockResolvedValue({
+      ok: true,
+      body: { getReader: () => mockReader },
+    })
+
+    const { useChat } = await import('../hooks/useChat')
+    const { result } = renderHook(() => useChat())
+
+    await result.current.sendMessage('Hello')
+
+    await waitFor(() => {
+      expect(mockSidecarFetch).toHaveBeenCalledWith(
+        '/api/chat',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"conversation_id":null'),
+        }),
+      )
+    }, { timeout: 3000 })
+  })
+
+  it('does NOT call POST /api/conversations (create)', async () => {
+    const mockReader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: conversation\ndata: {"conversation_id": "conv-1"}\n\n'),
+        })
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: done\ndata: {"done": true}\n\n'),
+        })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+    }
+
+    mockSidecarFetch.mockResolvedValue({
+      ok: true,
+      body: { getReader: () => mockReader },
+    })
+
+    const { useChat } = await import('../hooks/useChat')
+    const { result } = renderHook(() => useChat())
+
+    await result.current.sendMessage('Test')
+
+    await waitFor(() => {
+      const calls = mockSidecarFetch.mock.calls
+      const createCalls = calls.filter(
+        ([url, opts]) =>
+          typeof url === 'string' &&
+          url === '/api/conversations' &&
+          opts?.method === 'POST',
+      )
+      expect(createCalls).toHaveLength(0)
+    }, { timeout: 3000 })
+  })
+
+  it('does NOT call POST /api/conversations/{id}/messages', async () => {
+    const mockReader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: conversation\ndata: {"conversation_id": "conv-1"}\n\n'),
+        })
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: done\ndata: {"done": true}\n\n'),
+        })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+    }
+
+    mockSidecarFetch.mockResolvedValue({
+      ok: true,
+      body: { getReader: () => mockReader },
+    })
+
+    const { useChat } = await import('../hooks/useChat')
+    const { result } = renderHook(() => useChat())
+
+    await result.current.sendMessage('Test')
+
+    await waitFor(() => {
+      const calls = mockSidecarFetch.mock.calls
+      const persistCalls = calls.filter(
+        ([url, opts]) =>
+          typeof url === 'string' &&
+          /\/api\/conversations\/[^/]+\/messages$/.test(url) &&
+          opts?.method === 'POST',
+      )
+      expect(persistCalls).toHaveLength(0)
+    }, { timeout: 3000 })
+  })
+
+  it('event: conversation SSE event updates conversationId', async () => {
+    const mockReader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: conversation\ndata: {"conversation_id": "conv-xyz"}\n\n'),
+        })
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('data: {"content": "Hi"}\n\n'),
+        })
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: done\ndata: {"done": true}\n\n'),
+        })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+    }
+
+    mockSidecarFetch.mockResolvedValue({
+      ok: true,
+      body: { getReader: () => mockReader },
+    })
+
+    const { useChat } = await import('../hooks/useChat')
+    const { result } = renderHook(() => useChat())
+
+    expect(result.current.conversationId).toBeNull()
+
+    await result.current.sendMessage('Hello')
+
+    await waitFor(() => {
+      expect(result.current.conversationId).toBe('conv-xyz')
+    }, { timeout: 3000 })
+  })
+
+  it('clearMessages sets conversationId to null', async () => {
+    const mockReader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: conversation\ndata: {"conversation_id": "conv-clear"}\n\n'),
+        })
+        .mockResolvedValueOnce({
+          done: false,
+          value: new TextEncoder().encode('event: done\ndata: {"done": true}\n\n'),
+        })
+        .mockResolvedValueOnce({ done: true, value: undefined }),
+    }
+
+    mockSidecarFetch.mockResolvedValue({
+      ok: true,
+      body: { getReader: () => mockReader },
+    })
+
+    const { useChat } = await import('../hooks/useChat')
+    const { result } = renderHook(() => useChat())
+
+    await result.current.sendMessage('Test')
+
+    await waitFor(() => {
+      expect(result.current.conversationId).toBe('conv-clear')
+    }, { timeout: 3000 })
+
+    result.current.clearMessages()
+
+    await waitFor(() => {
+      expect(result.current.conversationId).toBeNull()
+      expect(result.current.messages).toHaveLength(0)
+    })
+  })
+
+  it('loadConversation sets conversationId to loaded conversation id', async () => {
+    const { useChat } = await import('../hooks/useChat')
+    const { result } = renderHook(() => useChat())
+
+    expect(result.current.conversationId).toBeNull()
+
+    act(() => {
+      result.current.loadConversation({
+        id: 'historical-conv-123',
+        messages: [
+          { role: 'user', content: 'Old message' },
+          { role: 'assistant', content: 'Old reply' },
+        ],
+      })
+    })
+
+    expect(result.current.conversationId).toBe('historical-conv-123')
+    expect(result.current.messages).toHaveLength(2)
   })
 })

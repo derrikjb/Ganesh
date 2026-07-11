@@ -26,14 +26,6 @@ function loadPersistedMessages(): ChatMessage[] {
   }
 }
 
-function loadPersistedConversationId(): string | null {
-  try {
-    return localStorage.getItem(CONVERSATION_STORAGE_KEY) || null
-  } catch {
-    return null
-  }
-}
-
 function persistMessages(messages: ChatMessage[]): void {
   try {
     const serializable = messages
@@ -47,75 +39,20 @@ function persistMessages(messages: ChatMessage[]): void {
   }
 }
 
-function persistConversationId(id: string | null): void {
-  try {
-    if (id) {
-      localStorage.setItem(CONVERSATION_STORAGE_KEY, id)
-    } else {
-      localStorage.removeItem(CONVERSATION_STORAGE_KEY)
-    }
-  } catch {
-  }
-}
-
-async function safeJson<T>(res: Response): Promise<T | null> {
-  try {
-    return (await res.json()) as T
-  } catch {
-    return null
-  }
-}
-
-async function ensureConversation(existingId: string | null): Promise<string | null> {
-  if (existingId) return existingId
-  try {
-    const res = await sidecarFetch('/api/conversations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: null }),
-    })
-    if (!res.ok) return null
-    const data = await safeJson<{ id: string }>(res)
-    return data?.id ?? null
-  } catch {
-    return null
-  }
-}
-
-async function persistMessage(
-  conversationId: string | null,
-  role: string,
-  content: string,
-): Promise<void> {
-  if (!conversationId || !content) return
-  try {
-    await sidecarFetch(`/api/conversations/${conversationId}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role, content }),
-    })
-  } catch {
-  }
-}
-
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadPersistedMessages())
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [conversationId, setConversationId] = useState<string | null>(() => loadPersistedConversationId())
+  const [conversationId, setConversationId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const lastUserMessageRef = useRef<string | null>(null)
   const lastFilesRef = useRef<AttachedFile[] | undefined>(undefined)
-  const conversationIdRef = useRef<string | null>(loadPersistedConversationId())
+  const conversationIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     persistMessages(messages)
   }, [messages])
-
-  useEffect(() => {
-    persistConversationId(conversationId)
-  }, [conversationId])
 
   const updateConversationId = useCallback((id: string | null) => {
     conversationIdRef.current = id
@@ -155,12 +92,6 @@ export function useChat(): UseChatReturn {
       .map((m) => ({ role: m.role, content: m.content }))
     apiMessages.push({ role: 'user' as const, content: text })
 
-    const convId = await ensureConversation(conversationIdRef.current)
-    if (convId && convId !== conversationIdRef.current) {
-      updateConversationId(convId)
-    }
-    void persistMessage(convId, 'user', text)
-
     try {
       const controller = new AbortController()
       abortRef.current = controller
@@ -168,7 +99,11 @@ export function useChat(): UseChatReturn {
       const response = await sidecarFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, stream: true }),
+        body: JSON.stringify({
+          messages: apiMessages,
+          stream: true,
+          conversation_id: conversationIdRef.current,
+        }),
         signal: controller.signal,
       })
 
@@ -194,6 +129,11 @@ export function useChat(): UseChatReturn {
         buffer = lines.pop() || ''
 
         for (const line of lines) {
+          if (line.startsWith('event: conversation')) {
+            // The next data: line carries {"conversation_id": "..."}.
+            // It will be processed when we reach that data: line below.
+            continue
+          }
           if (line.startsWith('event: done')) {
             break
           }
@@ -203,6 +143,11 @@ export function useChat(): UseChatReturn {
           if (line.startsWith('data: ')) {
             try {
               const json = JSON.parse(line.slice(6))
+              if (json.conversation_id && typeof json.conversation_id === 'string') {
+                if (json.conversation_id !== conversationIdRef.current) {
+                  updateConversationId(json.conversation_id)
+                }
+              }
               if (json.done) break
               if (json.content) {
                 accumulated += json.content
@@ -224,7 +169,6 @@ export function useChat(): UseChatReturn {
               : m,
         ),
       )
-      void persistMessage(convId, 'assistant', accumulated)
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
 
@@ -260,6 +204,11 @@ export function useChat(): UseChatReturn {
     lastUserMessageRef.current = null
     lastFilesRef.current = undefined
     updateConversationId(null)
+    // Defensive: clear any stale conversation_id written by older versions.
+    try {
+      localStorage.removeItem(CONVERSATION_STORAGE_KEY)
+    } catch {
+    }
     abortRef.current?.abort()
   }, [updateConversationId])
 
