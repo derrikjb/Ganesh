@@ -45,3 +45,17 @@ export interface ChatResponse {
   content: string
   conversation_id: string
 }
+
+export interface UseTTSReturn {
+  speak: (text: string) => Promise<void>
+  stop: () => void
+  isSpeaking: boolean
+  volume: number
+  setVolume: (v: number) => void
+  testChime: () => Promise<void>
+  outputDevices: MediaDeviceInfo[]
+  outputDeviceId: string | null
+  setOutputDeviceId: (id: string | null) => void
+  ttsEnabled: boolean
+  setTtsEnabled: (enabled: boolean) => void
+}
