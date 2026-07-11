@@ -43,8 +43,9 @@ DEFAULT_CONFIG = {
         "stt_device": "auto",         # "auto" | "cpu" | "cuda"
         "tts_device": "auto",         # "auto" | "cpu" | "cuda"
         "deepgram_model": "nova-2",   # Deepgram model name
-        "piper_voices": [],           # list of {"id": str, "name": str, "path": str}
-        "piper_active_voice": None,   # voice id string or None
+        "tts_voice_name": "af_heart",
+        "tts_model_path": "",
+        "tts_voices_path": "",
         "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM",
     },
     "personality": {

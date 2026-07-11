@@ -129,3 +129,14 @@ def test_conversation_memory_override(temp_config_dir):
     assert service.get_setting("conversation_memory.checkpoint_gap_seconds") == 600
     # Other defaults should remain
     assert service.get_setting("conversation_memory.min_messages_for_checkpoint") == 2
+
+def test_kokoro_config_defaults(temp_config_dir):
+    service = ConfigService()
+    assert service.get_setting("voice.tts_voice_name") == "af_heart"
+    assert service.get_setting("voice.tts_model_path") == ""
+    assert service.get_setting("voice.tts_voices_path") == ""
+
+def test_piper_config_removed(temp_config_dir):
+    service = ConfigService()
+    assert service.get_setting("voice.piper_voices") is None
+    assert service.get_setting("voice.piper_active_voice") is None
