@@ -26,6 +26,32 @@ DEFAULT_CONFIG = {
         "provider": "openai",
         "model": "gpt-4o-mini",
         "api_key": None,
+        "local": {
+            "base_url": "http://localhost:11434/v1",
+            "model": None,
+        },
+        "models": {
+            "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+            "anthropic": [
+                "claude-3-5-sonnet-20240620",
+                "claude-3-5-haiku-20241022",
+                "claude-3-opus-20240229",
+            ],
+            "google": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
+            "openrouter": [
+                "openai/gpt-4o-mini",
+                "anthropic/claude-3.5-sonnet",
+                "google/gemini-2.0-flash-001",
+            ],
+            "local": [],
+        },
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "top_p": 1.0,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0,
+        "timeout": 10.0,
+        "test_max_tokens": 1,
     },
     "memory": {
         "enabled": True,
@@ -34,44 +60,124 @@ DEFAULT_CONFIG = {
     "voice": {
         "stt_enabled": False,
         "tts_enabled": False,
-        "activation_mode": "click_to_talk",  # "click_to_talk" | "push_to_talk" | "vad"
-        "input_device": None,        # source name from pactl, or None for default
-        "stt_language": None,         # ISO-639-1 code (e.g. "en") or None for auto-detect
-        "stt_engine": "local",        # "local" | "cloud"
-        "tts_engine": "local",        # "local" | "cloud"
-        "whisper_model": "tiny",      # tiny|base|small|medium|large|large-v3|large-v3-turbo|distil-large-v3
-        "stt_device": "auto",         # "auto" | "cpu" | "cuda"
-        "tts_device": "auto",         # "auto" | "cpu" | "cuda"
-        "deepgram_model": "nova-2",   # Deepgram model name
+        "activation_mode": "click_to_talk",
+        "input_device": None,
+        "stt_language": None,
+        "stt_engine": "local",
+        "tts_engine": "local",
+        "whisper_model": "tiny",
+        "stt_device": "auto",
+        "tts_device": "auto",
+        "deepgram_model": "nova-2",
+        "deepgram_url": "https://api.deepgram.com/v1/listen",
+        "deepgram_smart_format": True,
+        "deepgram_punctuate": True,
+        "deepgram_diarize": False,
+        "stt_timeout": 30.0,
         "tts_voice_name": "af_heart",
         "tts_model_path": "",
         "tts_voices_path": "",
+        "kokoro_speed": 1.0,
+        "kokoro_lang": "en-us",
         "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM",
+        "elevenlabs_model": "eleven_multilingual_v2",
+        "elevenlabs_api_base": "https://api.elevenlabs.io/v1",
+        "elevenlabs_stability": None,
+        "elevenlabs_similarity_boost": None,
+        "elevenlabs_style": None,
+        "elevenlabs_speed": None,
+        "tts_timeout": 30.0,
+        "max_upload_bytes": 26214400,
+        "audio": {
+            "sample_rate": 16000,
+            "channels": 1,
+            "sample_width": 2,
+        },
+        "chime": {
+            "sample_rate": 22050,
+            "duration": 0.3,
+            "frequency": 440.0,
+            "fade_ms": 10,
+        },
+    },
+    "embeddings": {
+        "model": "all-MiniLM-L6-v2",
+        "dimension": 384,
+        "lancedb_uri": None,
     },
     "personality": {
         "traits": {
-            "formality": 0.0,       # -1.0 (casual) to 1.0 (formal)
-            "verbosity": 0.0,       # -1.0 (concise) to 1.0 (verbose)
-            "warmth": 0.5,          # 0.0 (cold) to 1.0 (warm)
-            "humor": 0.3,           # 0.0 (serious) to 1.0 (playful)
-            "assertiveness": 0.0,   # -1.0 (deferential) to 1.0 (assertive)
+            "formality": 0.0,
+            "verbosity": 0.0,
+            "warmth": 0.5,
+            "humor": 0.3,
+            "assertiveness": 0.0,
         },
         "locked": [],
+        "mutation_rate_cap": 0.15,
+        "mutation_scale": 0.05,
+        "trait_bounds": {
+            "formality": [-1.0, 1.0],
+            "verbosity": [-1.0, 1.0],
+            "warmth": [0.0, 1.0],
+            "humor": [0.0, 1.0],
+            "assertiveness": [-1.0, 1.0],
+        },
     },
     "update": {
-        "channel": "stable",       # stable | beta
-        "auto_check": True,        # check for updates on launch
+        "channel": "stable",
+        "auto_check": True,
     },
     "conversation_memory": {
-        "enabled": True,                        # master toggle for checkpoint system
-        "checkpoint_gap_seconds": 300,          # gap that triggers a checkpoint (5 min)
-        "min_messages_for_checkpoint": 2,        # don't checkpoint segments with fewer messages
-        "max_summaries_injected": 3,            # top-k conversation summaries injected for cross-day
-        "full_pull_threshold": 0.85,            # similarity score above which full transcript is pulled
-        "max_transcript_messages": 50,          # cap on messages pulled per transcript pull
-        "adjacent_segments": 1,                 # how many adjacent checkpoint segments to pull (cK-1, cK+1)
-        "summary_provider": None,              # None = use same provider as chat; or "openai" etc
-        "summary_model": None,                  # None = use default model for provider
+        "enabled": True,
+        "checkpoint_gap_seconds": 300,
+        "min_messages_for_checkpoint": 2,
+        "max_summaries_injected": 3,
+        "full_pull_threshold": 0.85,
+        "max_transcript_messages": 50,
+        "adjacent_segments": 1,
+        "summary_provider": None,
+        "summary_model": None,
+        "checkpoint_max_tokens": 200,
+        "conversation_max_tokens": 500,
+    },
+    "retrieval": {
+        "cross_day_threshold": 0.3,
+        "search_limit": 5,
+    },
+    "continuity": {
+        "welcome_threshold_seconds": 300,
+    },
+    "search": {
+        "backend": "duckduckgo",
+        "url": "https://html.duckduckgo.com/html/",
+        "default_results": 5,
+        "max_results": 20,
+        "timeout": 10.0,
+        "user_agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+    },
+    "patterns": {
+        "detection_threshold": 3,
+        "suggestion_confidence": 0.7,
+        "accept_delta": 0.1,
+        "decline_delta": -0.2,
+    },
+    "conversations": {
+        "auto_title_max_len": 50,
+        "default_title": "New Conversation",
+    },
+    "model_download": {
+        "chunk_size": 65536,
+        "disk_space_safety_multiplier": 2,
+    },
+    "summary_embeddings": {
+        "checkpoint_collection": "ganesh_checkpoint_summaries",
+        "conversation_collection": "ganesh_conversation_summaries",
+        "pool_limit_multiplier": 10,
+        "pool_limit_min": 50,
     },
 }
 

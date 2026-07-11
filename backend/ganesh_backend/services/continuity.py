@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Any
 
+from ganesh_backend.services.config import config_service
+
 
 # Gap (in seconds) that must elapse between sessions before a welcome-back
 # message is generated. 5 minutes = 300s.
@@ -127,10 +129,16 @@ class ContinuityService:
     def __init__(
         self,
         db_path: Optional[str] = None,
-        threshold_seconds: float = WELCOME_THRESHOLD_SECONDS,
+        threshold_seconds: Optional[float] = None,
     ) -> None:
         self._db_path: str = db_path or _default_db_path()
-        self._threshold: float = threshold_seconds
+        self._threshold: float = (
+            threshold_seconds
+            if threshold_seconds is not None
+            else config_service.get_setting(
+                "continuity.welcome_threshold_seconds", WELCOME_THRESHOLD_SECONDS
+            )
+        )
         self._lock = threading.RLock()
         self._conn: sqlite3.Connection = sqlite3.connect(
             self._db_path, check_same_thread=False

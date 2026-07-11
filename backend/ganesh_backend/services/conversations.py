@@ -23,6 +23,7 @@ from ganesh_backend.embeddings import (
     EmbedderProtocol,
     create_default_embedder,
 )
+from ganesh_backend.services.config import config_service
 from ganesh_backend.vector_store import LanceDbVectorStore
 
 DEFAULT_COLLECTION = "ganesh_conversation_embeddings"
@@ -181,7 +182,10 @@ class ConversationStore:
         """Create a new conversation and return its id."""
         conv_id = str(uuid.uuid4())
         now = self._now()
-        final_title = title if title else DEFAULT_TITLE
+        default_title = config_service.get_setting(
+            "conversations.default_title", DEFAULT_TITLE
+        )
+        final_title = title if title else default_title
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO conversations (id, title, profile_id, created_at, updated_at, status) "
@@ -219,8 +223,14 @@ class ConversationStore:
             )
 
             new_title = conv["title"]
-            if conv["title"] == DEFAULT_TITLE and role == "user":
-                new_title = content[:AUTO_TITLE_MAX_LEN]
+            default_title = config_service.get_setting(
+                "conversations.default_title", DEFAULT_TITLE
+            )
+            auto_title_max_len = config_service.get_setting(
+                "conversations.auto_title_max_len", AUTO_TITLE_MAX_LEN
+            )
+            if conv["title"] == default_title and role == "user":
+                new_title = content[:auto_title_max_len]
 
             conn.execute(
                 "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",

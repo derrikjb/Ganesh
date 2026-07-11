@@ -41,7 +41,10 @@ KOKORO_VOICE_NAMES = ["af_heart", "af_bella", "am_adam"]
 def _reset_tts_singleton():
     reset_tts_service()
     config_service.set_setting("voice.tts_voice_name", DEFAULT_KOKORO_VOICE)
-    yield
+    config_service.set_setting("voice.tts_engine", "local")
+    with patch("ganesh_backend.services.config.config_service.get_voice_provider_key", return_value=None), \
+         patch("ganesh_backend.services.config.config_service.get_voice_provider_key_env", return_value=None):
+        yield
     reset_tts_service()
     config_service.set_setting("voice.tts_voice_name", DEFAULT_KOKORO_VOICE)
 

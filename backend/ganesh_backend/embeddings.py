@@ -16,6 +16,8 @@ import hashlib
 import struct
 from typing import Protocol, runtime_checkable, Any
 
+from ganesh_backend.services.config import config_service
+
 DEFAULT_EMBEDDING_DIM = 384
 DEFAULT_MODEL_NAME = "all-MiniLM-L6-v2"
 
@@ -120,10 +122,18 @@ def create_default_embedder() -> EmbedderProtocol:
 
     Falls back to :class:`HashEmbedder` if ``sentence-transformers`` is not
     installed, so the service degrades gracefully in minimal environments.
+
+    Model name and dimension are read from config (``embeddings.model`` and
+    ``embeddings.dimension``) with the module-level constants as fallback
+    defaults.
     """
+    model_name = config_service.get_setting("embeddings.model", DEFAULT_MODEL_NAME)
+    dimension = config_service.get_setting("embeddings.dimension", DEFAULT_EMBEDDING_DIM)
     try:
         import sentence_transformers  # noqa: F401, type: ignore[import-untyped]
 
-        return SentenceTransformerEmbedder()
+        return SentenceTransformerEmbedder(
+            model_name=model_name, dimension=dimension
+        )
     except ImportError:
-        return HashEmbedder()
+        return HashEmbedder(dimension=dimension)

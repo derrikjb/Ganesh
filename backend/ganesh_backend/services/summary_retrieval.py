@@ -27,6 +27,7 @@ import logging
 from datetime import datetime
 from typing import Any, Optional, Protocol
 
+from ganesh_backend.services.config import config_service
 from ganesh_backend.services.conversations import ConversationStore
 from ganesh_backend.services.summary_embeddings import SummaryEmbeddingStore
 
@@ -148,7 +149,12 @@ class ContextAssemblyService:
             logger.exception("Failed cross-day conversation search")
             return None
 
-        relevant = [r for r in results if r.score >= MIN_CROSS_DAY_SCORE]
+        relevant = [
+            r for r in results
+            if r.score >= config_service.get_setting(
+                "retrieval.cross_day_threshold", MIN_CROSS_DAY_SCORE
+            )
+        ]
         if not relevant:
             return None
 
@@ -188,7 +194,7 @@ class ContextAssemblyService:
             results = self._emb_store.search_checkpoint_summaries(
                 query=user_message,
                 conversation_id=conversation_id,
-                limit=5,
+                limit=config_service.get_setting("retrieval.search_limit", 5),
             )
         except Exception:
             logger.exception("Failed checkpoint summary search for pull")

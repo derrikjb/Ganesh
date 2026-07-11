@@ -29,7 +29,7 @@ class ConfigProtocol(Protocol):
 
 _CHECKPOINT_SYSTEM_PROMPT = (
     "You are a conversation checkpoint summarizer. Summarize the following "
-    "segment of a conversation concisely (~200 tokens) including:\n"
+    "segment of a conversation concisely (~{checkpoint_max} tokens) including:\n"
     "- Topics discussed in this segment\n"
     "- Key facts, decisions, and technical details\n"
     "- User's emotional state and preferences (if discernible)\n"
@@ -43,7 +43,7 @@ _CONVERSATION_SYSTEM_PROMPT = (
     "You are a conversation summarizer. This conversation has been divided "
     "into checkpoint segments. Below are the checkpoint summaries in order, "
     "followed by any recent messages not yet checkpointed.\n\n"
-    "Produce a comprehensive conversation-level summary (~500 tokens) that "
+    "Produce a comprehensive conversation-level summary (~{conversation_max} tokens) that "
     "captures the full arc of the conversation: main topics, key decisions, "
     "user preferences, technical details, and unresolved items.\n\n"
     "{checkpoint_block}"
@@ -205,7 +205,10 @@ class SummaryGenerationService:
             prev_context = ""
 
         system_content = _CHECKPOINT_SYSTEM_PROMPT.format(
-            prev_context=prev_context
+            prev_context=prev_context,
+            checkpoint_max=self._config.get_setting(
+                "conversation_memory.checkpoint_max_tokens", 200
+            ),
         )
 
         transcript_lines: list[str] = []
@@ -254,6 +257,9 @@ class SummaryGenerationService:
         system_content = _CONVERSATION_SYSTEM_PROMPT.format(
             checkpoint_block=checkpoint_block,
             recent_block=recent_block,
+            conversation_max=self._config.get_setting(
+                "conversation_memory.conversation_max_tokens", 500
+            ),
         )
 
         return [

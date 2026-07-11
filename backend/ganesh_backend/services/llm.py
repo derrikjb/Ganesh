@@ -183,13 +183,18 @@ def get_available_models(provider: str = DEFAULT_PROVIDER) -> list[str]:
         base_url = _get_local_base_url().rstrip("/")
         url = f"{base_url}/models"
         try:
-            resp = httpx.get(url, timeout=10.0)
+            resp = httpx.get(
+                url,
+                timeout=config_service.get_setting("llm.timeout", 10.0),
+            )
             resp.raise_for_status()
             data = resp.json()
             return [m["id"] for m in data.get("data", [])]
         except Exception:
             return []
-    return list(PROVIDER_MODELS[provider])
+    fallback = list(PROVIDER_MODELS.get(provider, []))
+    configured = config_service.get_setting(f"llm.models.{provider}", fallback)
+    return list(configured)
 
 
 def chat_completion(
@@ -236,6 +241,15 @@ def chat_completion(
         "messages": messages,
         "stream": stream,
         "api_key": api_key,
+        "temperature": config_service.get_setting("llm.temperature", 0.7),
+        "max_tokens": config_service.get_setting("llm.max_tokens", 1000),
+        "top_p": config_service.get_setting("llm.top_p", 1.0),
+        "frequency_penalty": config_service.get_setting(
+            "llm.frequency_penalty", 0.0
+        ),
+        "presence_penalty": config_service.get_setting(
+            "llm.presence_penalty", 0.0
+        ),
     }
     if provider == "local":
         kwargs["api_base"] = _get_local_base_url()
@@ -304,7 +318,10 @@ def test_connection(provider: str = DEFAULT_PROVIDER) -> bool:
     if provider == "local":
         base_url = _get_local_base_url().rstrip("/")
         try:
-            resp = httpx.get(f"{base_url}/models", timeout=10.0)
+            resp = httpx.get(
+                f"{base_url}/models",
+                timeout=config_service.get_setting("llm.timeout", 10.0),
+            )
             resp.raise_for_status()
             return True
         except Exception:
@@ -322,7 +339,7 @@ def test_connection(provider: str = DEFAULT_PROVIDER) -> bool:
         litellm.completion(
             model=litellm_model,
             messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
+            max_tokens=config_service.get_setting("llm.test_max_tokens", 1),
             api_key=api_key,
         )
     except Exception:  # noqa: BLE001 - any failure means the key is bad

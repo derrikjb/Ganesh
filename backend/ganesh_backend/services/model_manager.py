@@ -25,6 +25,8 @@ from typing import Optional
 
 import httpx
 
+from ganesh_backend.services.config import config_service
+
 DEFAULT_MODELS_DIR = Path.home() / ".ganesh" / "models"
 
 CHUNK_SIZE = 64 * 1024
@@ -178,7 +180,10 @@ class ModelManager:
         """
         usage = shutil.disk_usage(self._models_dir)
         max_model_size = max((s.size for s in self._specs.values()), default=0)
-        threshold = max_model_size * 2 if max_model_size > 0 else 0
+        safety_multiplier = config_service.get_setting(
+            "model_download.disk_space_safety_multiplier", DISK_SPACE_SAFETY_MULTIPLIER
+        )
+        threshold = max_model_size * safety_multiplier if max_model_size > 0 else 0
         sufficient = threshold == 0 or usage.free >= threshold
         return {
             "free": usage.free,
@@ -199,14 +204,18 @@ class ModelManager:
         spec = self._specs[name]
         usage = shutil.disk_usage(self._models_dir)
         free = usage.free
-        required = spec.size * DISK_SPACE_SAFETY_MULTIPLIER
+        safety_multiplier = config_service.get_setting(
+            "model_download.disk_space_safety_multiplier", DISK_SPACE_SAFETY_MULTIPLIER
+        )
+        required = spec.size * safety_multiplier
         return (free >= required, free, required)
 
     @staticmethod
     def _sha256_file(path: Path) -> str:
+        chunk_size = config_service.get_setting("model_download.chunk_size", CHUNK_SIZE)
         h = hashlib.sha256()
         with open(path, "rb") as f:
-            for chunk in iter(lambda: f.read(CHUNK_SIZE), b""):
+            for chunk in iter(lambda: f.read(chunk_size), b""):
                 h.update(chunk)
         return h.hexdigest()
 
@@ -321,7 +330,10 @@ class ModelManager:
                     return
                 raise
             with f:
-                async for chunk in resp.aiter_bytes(CHUNK_SIZE):
+                chunk_size = config_service.get_setting(
+                    "model_download.chunk_size", CHUNK_SIZE
+                )
+                async for chunk in resp.aiter_bytes(chunk_size):
                     pause_event = self._pause_events.get(spec.name)
                     while pause_event is not None and pause_event.is_set():
                         progress.update(status="paused")

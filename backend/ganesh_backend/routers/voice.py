@@ -35,10 +35,6 @@ from ganesh_backend.services.voice_activation import (
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
-# 25 MiB upload cap — plenty for a short voice memo, blocks accidental huge
-# uploads that would blow the sidecar's memory budget.
-MAX_AUDIO_BYTES: int = 25 * 1024 * 1024
-
 
 class TranscriptionResponse(BaseModel):
     text: str
@@ -60,13 +56,16 @@ async def transcribe(
     if file is None or not file.filename:
         raise HTTPException(status_code=400, detail="no audio file uploaded")
 
+    # 25 MiB upload cap — plenty for a short voice memo, blocks accidental huge
+    # uploads that would blow the sidecar's memory budget.
+    max_bytes = config_service.get_setting("voice.max_upload_bytes", 26214400)
     audio_bytes = await file.read()
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="uploaded file is empty")
-    if len(audio_bytes) > MAX_AUDIO_BYTES:
+    if len(audio_bytes) > max_bytes:
         raise HTTPException(
             status_code=413,
-            detail=f"audio too large: {len(audio_bytes)} > {MAX_AUDIO_BYTES} bytes",
+            detail=f"audio too large: {len(audio_bytes)} > {max_bytes} bytes",
         )
 
     # Spool to a temp file so faster-whisper (which uses ffmpeg/av to demux)
@@ -154,7 +153,9 @@ async def synthesize(req: SynthesizeRequest) -> Response:
 
 class ChimeRequest(BaseModel):
     volume: float = Field(0.5, ge=0.0, le=1.0, description="Volume 0.0-1.0")
-    frequency: float = Field(440.0, ge=100.0, le=2000.0, description="Hz")
+    frequency: Optional[float] = Field(
+        None, ge=100.0, le=2000.0, description="Hz"
+    )
 
 
 @router.post("/chime")
@@ -163,11 +164,15 @@ async def play_chime(req: ChimeRequest) -> Response:
     import math
     import struct
 
-    sample_rate = 22050
-    duration = 0.3  # 300ms chime
+    sample_rate = config_service.get_setting("voice.chime.sample_rate", 22050)
+    duration = config_service.get_setting("voice.chime.duration", 0.3)
+    frequency = req.frequency if req.frequency is not None else config_service.get_setting(
+        "voice.chime.frequency", 440.0
+    )
+    fade_ms = config_service.get_setting("voice.chime.fade_ms", 10)
     num_samples = int(sample_rate * duration)
     samples: list[int] = []
-    fade_samples = int(sample_rate * 0.01)
+    fade_samples = int(sample_rate * fade_ms / 1000.0)
     for i in range(num_samples):
         # Fade in/out envelope (10ms each)
         if i < fade_samples:
@@ -178,7 +183,7 @@ async def play_chime(req: ChimeRequest) -> Response:
             envelope = 1.0
         # Sine wave
         value = (
-            math.sin(2 * math.pi * req.frequency * i / sample_rate)
+            math.sin(2 * math.pi * frequency * i / sample_rate)
             * envelope
             * req.volume
         )
@@ -504,18 +509,21 @@ def _list_input_devices() -> list[dict[str, str]]:
     return devices
 
 
-RECORD_RATE = 16000
-RECORD_CHANNELS = 1
-RECORD_SAMPLE_WIDTH = 2
+_DEFAULT_RECORD_RATE = 16000
+_DEFAULT_RECORD_CHANNELS = 1
+_DEFAULT_RECORD_SAMPLE_WIDTH = 2
 
 
 def _raw_to_wav(raw_path: str, wav_path: str) -> None:
+    record_channels = config_service.get_setting("voice.audio.channels", _DEFAULT_RECORD_CHANNELS)
+    record_sample_width = config_service.get_setting("voice.audio.sample_width", _DEFAULT_RECORD_SAMPLE_WIDTH)
+    record_rate = config_service.get_setting("voice.audio.sample_rate", _DEFAULT_RECORD_RATE)
     with open(raw_path, "rb") as f:
         pcm = f.read()
     with wave.open(wav_path, "wb") as wav:
-        wav.setnchannels(RECORD_CHANNELS)
-        wav.setsampwidth(RECORD_SAMPLE_WIDTH)
-        wav.setframerate(RECORD_RATE)
+        wav.setnchannels(record_channels)
+        wav.setsampwidth(record_sample_width)
+        wav.setframerate(record_rate)
         wav.writeframes(pcm)
 
 
@@ -523,12 +531,13 @@ def _build_record_cmd(path: str, raw: bool = False) -> list[str]:
     import shutil
 
     device = config_service.get_setting("voice.input_device")
+    record_rate = config_service.get_setting("voice.audio.sample_rate", _DEFAULT_RECORD_RATE)
 
     if shutil.which("parecord"):
         cmd = [
             "parecord",
             "--format=s16le",
-            f"--rate={RECORD_RATE}",
+            f"--rate={record_rate}",
             "--channels=1",
             "--raw",
             "--latency-msec=5",
@@ -539,7 +548,7 @@ def _build_record_cmd(path: str, raw: bool = False) -> list[str]:
         return cmd
 
     if shutil.which("arecord"):
-        cmd = ["arecord", "-q", "-t", "raw", "-f", "S16_LE", "-r", str(RECORD_RATE), "-c", "1"]
+        cmd = ["arecord", "-q", "-t", "raw", "-f", "S16_LE", "-r", str(record_rate), "-c", "1"]
         if device:
             cmd += ["-D", device]
         cmd.append(path)

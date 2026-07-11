@@ -26,6 +26,7 @@ from ganesh_backend.embeddings import (
     EmbedderProtocol,
     create_default_embedder,
 )
+from ganesh_backend.services.config import config_service
 from ganesh_backend.vector_store import LanceDbVectorStore
 
 CHECKPOINT_COLLECTION = "ganesh_checkpoint_summaries"
@@ -34,6 +35,9 @@ DEFAULT_LANCEDB_URI = ":memory:"
 
 
 def _default_lancedb_uri() -> str:
+    configured = config_service.get_setting("embeddings.lancedb_uri", None)
+    if configured:
+        return str(configured)
     env_dir = os.environ.get("GANESH_DATA_DIR")
     if env_dir:
         base = Path(env_dir)
@@ -80,8 +84,12 @@ class SummaryEmbeddingStore:
     ) -> None:
         self._uri = uri
         self._embedder = embedder or create_default_embedder()
-        self._checkpoint_collection = CHECKPOINT_COLLECTION
-        self._conversation_collection = CONVERSATION_COLLECTION
+        self._checkpoint_collection = config_service.get_setting(
+            "summary_embeddings.checkpoint_collection", CHECKPOINT_COLLECTION
+        )
+        self._conversation_collection = config_service.get_setting(
+            "summary_embeddings.conversation_collection", CONVERSATION_COLLECTION
+        )
 
         self._checkpoint_store = LanceDbVectorStore(
             uri=uri,
@@ -148,7 +156,13 @@ class SummaryEmbeddingStore:
         if not query.strip():
             return []
         query_embedding = self._embedder.embed(query)
-        pool_limit = max(limit * 10, 50)
+        multiplier = config_service.get_setting(
+            "summary_embeddings.pool_limit_multiplier", 10
+        )
+        pool_min = config_service.get_setting(
+            "summary_embeddings.pool_limit_min", 50
+        )
+        pool_limit = max(limit * multiplier, pool_min)
         results = self._checkpoint_store.search(
             query=query,
             vectors=query_embedding,
@@ -230,7 +244,13 @@ class SummaryEmbeddingStore:
         if not query.strip():
             return []
         query_embedding = self._embedder.embed(query)
-        pool_limit = max(limit * 10, 50)
+        multiplier = config_service.get_setting(
+            "summary_embeddings.pool_limit_multiplier", 10
+        )
+        pool_min = config_service.get_setting(
+            "summary_embeddings.pool_limit_min", 50
+        )
+        pool_limit = max(limit * multiplier, pool_min)
         results = self._conversation_store.search(
             query=query,
             vectors=query_embedding,

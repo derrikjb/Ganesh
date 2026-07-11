@@ -102,7 +102,8 @@ class TTSService:
             or ELEVENLABS_DEFAULT_VOICE_ID
         )
         self._elevenlabs_model: str = (
-            elevenlabs_model or ELEVENLABS_DEFAULT_MODEL
+            elevenlabs_model
+            or config_service.get_setting("voice.elevenlabs_model", ELEVENLABS_DEFAULT_MODEL)
         )
         self._elevenlabs_api_key_override: Optional[str] = elevenlabs_api_key
         self._kokoro_cache: dict[str, Any] = {}
@@ -280,8 +281,10 @@ class TTSService:
     ) -> bytes:
         import soundfile as sf
 
+        speed = config_service.get_setting("voice.kokoro_speed", 1.0)
+        lang = config_service.get_setting("voice.kokoro_lang", "en-us")
         samples, sample_rate = kokoro.create(
-            text, voice=voice_name, speed=1.0, lang="en-us"
+            text, voice=voice_name, speed=speed, lang=lang
         )
         buf = io.BytesIO()
         sf.write(buf, samples, sample_rate, format="WAV", subtype="PCM_16")
@@ -313,15 +316,34 @@ class TTSService:
         if not api_key:
             return None
         voice_id = voice or self._elevenlabs_voice_id
-        url = f"{ELEVENLABS_API_BASE}/text-to-speech/{voice_id}"
+        api_base = config_service.get_setting("voice.elevenlabs_api_base", ELEVENLABS_API_BASE)
+        url = f"{api_base}/text-to-speech/{voice_id}"
         headers = {
             "xi-api-key": api_key,
             "Content-Type": "application/json",
             "Accept": "audio/mpeg",
         }
-        payload = {"text": text, "model_id": self._elevenlabs_model}
+        payload: dict[str, Any] = {"text": text, "model_id": self._elevenlabs_model}
+        voice_settings: dict[str, Any] = {}
+        stability = config_service.get_setting("voice.elevenlabs_stability", None)
+        if stability is not None:
+            voice_settings["stability"] = stability
+        similarity_boost = config_service.get_setting(
+            "voice.elevenlabs_similarity_boost", None
+        )
+        if similarity_boost is not None:
+            voice_settings["similarity_boost"] = similarity_boost
+        style = config_service.get_setting("voice.elevenlabs_style", None)
+        if style is not None:
+            voice_settings["style"] = style
+        speed = config_service.get_setting("voice.elevenlabs_speed", None)
+        if speed is not None:
+            voice_settings["speed"] = speed
+        if voice_settings:
+            payload["voice_settings"] = voice_settings
+        timeout = config_service.get_setting("voice.tts_timeout", 30.0)
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=timeout) as client:
                 resp = client.post(url, headers=headers, json=payload)
         except httpx.HTTPError as exc:
             logger.exception("TTS cloud synthesis failed: %s", exc)

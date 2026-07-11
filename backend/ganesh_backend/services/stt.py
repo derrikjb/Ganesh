@@ -114,7 +114,7 @@ def _resolve_device() -> tuple[str, str]:
 def _cuda_device_count() -> int:
     try:
         import ctranslate2
-        return ctranslate2.get_cuda_device_count()
+        return int(ctranslate2.get_cuda_device_count())
     except Exception:
         return 0
 
@@ -275,11 +275,17 @@ def reset_deepgram_key_cache() -> None:
 
 def _deepgram_params(language: Optional[str]) -> dict[str, str]:
     """Build Deepgram query-string params."""
+    model = config_service.get_setting("voice.deepgram_model", "nova-2")
+    smart_format = config_service.get_setting("voice.deepgram_smart_format", True)
+    punctuate = config_service.get_setting("voice.deepgram_punctuate", True)
+    diarize = config_service.get_setting("voice.deepgram_diarize", False)
     params: dict[str, str] = {
-        "model": "nova-2",
-        "smart_format": "true",
-        "punctuate": "true",
+        "model": model,
+        "smart_format": "true" if smart_format else "false",
+        "punctuate": "true" if punctuate else "false",
     }
+    if diarize:
+        params["diarize"] = "true"
     if language:
         params["language"] = language
     return params
@@ -313,16 +319,18 @@ def transcribe_cloud(
     with open(audio_path, "rb") as fh:
         audio_bytes = fh.read()
 
+    url = config_service.get_setting("voice.deepgram_url", DEEPGRAM_URL)
+    timeout = config_service.get_setting("voice.stt_timeout", 30.0)
     own_client = client is None
     if own_client:
-        client = httpx.AsyncClient(timeout=30.0)
+        client = httpx.AsyncClient(timeout=timeout)
 
     try:
         import asyncio
 
         response = asyncio.get_event_loop().run_until_complete(
             client.post(  # type: ignore[union-attr]
-                DEEPGRAM_URL, params=params, headers=headers, content=audio_bytes
+                url, params=params, headers=headers, content=audio_bytes
             )
         )
     finally:
@@ -372,13 +380,15 @@ async def transcribe_cloud_async(
     with open(audio_path, "rb") as fh:
         audio_bytes = fh.read()
 
+    url = config_service.get_setting("voice.deepgram_url", DEEPGRAM_URL)
+    timeout = config_service.get_setting("voice.stt_timeout", 30.0)
     own_client = client is None
     if own_client:
-        client = httpx.AsyncClient(timeout=30.0)
+        client = httpx.AsyncClient(timeout=timeout)
 
     try:
         response = await client.post(  # type: ignore[union-attr]
-            DEEPGRAM_URL, params=params, headers=headers, content=audio_bytes
+            url, params=params, headers=headers, content=audio_bytes
         )
     finally:
         if own_client and client is not None:

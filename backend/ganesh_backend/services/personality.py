@@ -57,8 +57,33 @@ def clamp(value: float, low: float, high: float) -> float:
     return value
 
 
+def _get_mutation_rate_cap() -> float:
+    return float(config_service.get_setting("personality.mutation_rate_cap", MUTATION_RATE_CAP))
+
+
+def _get_mutation_scale() -> float:
+    return float(config_service.get_setting("personality.mutation_scale", 0.05))
+
+
+def _get_trait_bounds() -> dict[str, tuple[float, float]]:
+    configured = config_service.get_setting("personality.trait_bounds", None)
+    if not isinstance(configured, dict):
+        return TRAIT_BOUNDS
+    out: dict[str, tuple[float, float]] = {}
+    for trait, bounds in TRAIT_BOUNDS.items():
+        raw = configured.get(trait)
+        if isinstance(raw, (list, tuple)) and len(raw) == 2:
+            try:
+                out[trait] = (float(raw[0]), float(raw[1]))
+            except (TypeError, ValueError):
+                out[trait] = bounds
+        else:
+            out[trait] = bounds
+    return out
+
+
 def _clamp_trait(trait: str, value: float) -> float:
-    low, high = TRAIT_BOUNDS[trait]
+    low, high = _get_trait_bounds()[trait]
     return clamp(float(value), low, high)
 
 
@@ -112,10 +137,12 @@ def _analyze_context(context: Mapping[str, Any]) -> dict[str, float]:
 
     for trait in deltas:
         raw = deltas[trait]
+        scale = _get_mutation_scale()
+        cap = _get_mutation_rate_cap()
         if raw > 0:
-            deltas[trait] = min(raw * 0.05, MUTATION_RATE_CAP)
+            deltas[trait] = min(raw * scale, cap)
         else:
-            deltas[trait] = max(raw * 0.05, -MUTATION_RATE_CAP)
+            deltas[trait] = max(raw * scale, -cap)
     return deltas
 
 
@@ -264,11 +291,12 @@ class PersonalityEngine:
 
     def shift_traits(self, context: Mapping[str, Any]) -> dict[str, float]:
         deltas = _analyze_context(context)
+        cap = _get_mutation_rate_cap()
         for trait, delta in deltas.items():
             if trait in self._locked:
                 continue
             current = self._current[trait]
-            capped_delta = clamp(delta, -MUTATION_RATE_CAP, MUTATION_RATE_CAP)
+            capped_delta = clamp(delta, -cap, cap)
             new_value = _clamp_trait(trait, current + capped_delta)
             self._current[trait] = new_value
         return dict(self._current)
@@ -287,11 +315,12 @@ class PersonalityEngine:
         Locked traits are skipped entirely. No state is persisted.
         """
         conf = clamp(float(confidence), 0.0, 1.0)
+        cap = _get_mutation_rate_cap()
         for trait, raw_delta in deltas.items():
             if trait not in TRAIT_BOUNDS or trait in self._locked:
                 continue
             scaled = float(raw_delta) * conf
-            capped_delta = clamp(scaled, -MUTATION_RATE_CAP, MUTATION_RATE_CAP)
+            capped_delta = clamp(scaled, -cap, cap)
             current = self._current[trait]
             self._current[trait] = _clamp_trait(trait, current + capped_delta)
         return dict(self._current)

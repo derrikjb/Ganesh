@@ -14,6 +14,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 
+from ganesh_backend.services.config import config_service
+
 DDG_HTML_URL = "https://html.duckduckgo.com/html/"
 DEFAULT_NUM_RESULTS = 5
 MAX_NUM_RESULTS = 20
@@ -82,16 +84,22 @@ async def web_search(
     On rate-limiting (HTTP 429) or network errors, returns an empty list
     rather than raising — search is a best-effort tool.
     """
+    url = config_service.get_setting("search.url", DDG_HTML_URL)
+    timeout = config_service.get_setting("search.timeout", REQUEST_TIMEOUT)
+    user_agent = config_service.get_setting("search.user_agent", USER_AGENT)
+    max_results = config_service.get_setting("search.max_results", MAX_NUM_RESULTS)
+    effective_num = min(num_results, max_results)
+
     owns_client = client is None
     if client is None:
-        client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT)
+        client = httpx.AsyncClient(timeout=timeout)
 
     try:
         response = await client.post(
-            DDG_HTML_URL,
+            url,
             data={"q": query},
             headers={
-                "User-Agent": USER_AGENT,
+                "User-Agent": user_agent,
                 "Accept": "text/html,application/xhtml+xml",
                 "Accept-Language": "en-US,en;q=0.9",
             },
@@ -99,7 +107,7 @@ async def web_search(
         if response.status_code == 429:
             return []
         response.raise_for_status()
-        return parse_results(response.text, num_results)
+        return parse_results(response.text, effective_num)
     except httpx.HTTPError:
         return []
     finally:

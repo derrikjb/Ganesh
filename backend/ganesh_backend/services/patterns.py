@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from ganesh_backend.services.config import config_service
 from ganesh_backend.services.memory import MemoryService, MemoryRecord
 
 
@@ -258,10 +259,16 @@ class PatternService:
           * confidence >= ``SUGGESTION_CONFIDENCE_THRESHOLD``
         """
         out: list[PatternRecord] = []
+        detection_threshold = config_service.get_setting(
+            "patterns.detection_threshold", DETECTION_THRESHOLD_OCCURRENCES
+        )
+        suggestion_confidence = config_service.get_setting(
+            "patterns.suggestion_confidence", SUGGESTION_CONFIDENCE_THRESHOLD
+        )
         for p in self.list_patterns(profile_id=profile_id, include_archived=False):
             if (
-                p.occurrences >= DETECTION_THRESHOLD_OCCURRENCES
-                and p.confidence >= SUGGESTION_CONFIDENCE_THRESHOLD
+                p.occurrences >= detection_threshold
+                and p.confidence >= suggestion_confidence
             ):
                 out.append(p)
         return out
@@ -275,7 +282,8 @@ class PatternService:
         p = self.get_pattern(pattern_id, profile_id=profile_id)
         if p is None or p.status != STATUS_ACTIVE:
             return None
-        p.confidence = min(1.0, p.confidence + ACCEPT_DELTA)
+        accept_delta = config_service.get_setting("patterns.accept_delta", ACCEPT_DELTA)
+        p.confidence = min(1.0, p.confidence + accept_delta)
         p.updated_at = _now_iso()
         self._memory.update_memory(
             p.id,
@@ -292,7 +300,8 @@ class PatternService:
         p = self.get_pattern(pattern_id, profile_id=profile_id)
         if p is None or p.status != STATUS_ACTIVE:
             return None
-        p.confidence = max(0.0, p.confidence + DECLINE_DELTA)
+        decline_delta = config_service.get_setting("patterns.decline_delta", DECLINE_DELTA)
+        p.confidence = max(0.0, p.confidence + decline_delta)
         p.updated_at = _now_iso()
         self._memory.update_memory(
             p.id,
