@@ -279,6 +279,42 @@ voice:
 
 Cloud API keys for Deepgram and ElevenLabs are stored in the OS keyring, not in the config file. Set them via the Voice Settings panel.
 
+### Kokoro TTS Model Setup
+
+Kokoro TTS requires two model files downloaded to `~/.ganesh/models/`:
+
+| File | Size | Description |
+|------|------|-------------|
+| `kokoro-v1.0.onnx` | ~311 MB | Neural TTS model (ONNX format) |
+| `voices-v1.0.bin` | ~27 MB | Voice definitions (all built-in voices) |
+
+Download from the [kokoro-onnx releases page](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.0):
+
+```bash
+mkdir -p ~/.ganesh/models
+cd ~/.ganesh/models
+wget https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+wget https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+```
+
+Install the Python dependencies in the backend venv:
+
+```bash
+cd backend
+./venv/bin/pip install kokoro-onnx soundfile
+```
+
+The system also requires `espeak-ng` for phoneme generation:
+
+```bash
+# Linux
+sudo apt-get install espeak-ng
+
+# The kokoro-onnx package bundles espeakng-loader as a fallback if the system package is missing.
+```
+
+Available voices can be listed via `GET /api/voice/tts-voices` or selected in the Voice Settings panel. The default voice is `af_heart` (American English, female).
+
 ### GPU Acceleration (NVIDIA CUDA)
 
 STT (faster-whisper via CTranslate2) and TTS (Kokoro via ONNX Runtime) both support optional NVIDIA GPU acceleration. By default, `stt_device` and `tts_device` are set to `auto`, which detects CUDA and uses it if available. Users without NVIDIA GPUs are unaffected — the app runs on CPU.
