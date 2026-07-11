@@ -69,6 +69,8 @@ export function useTTS(): UseTTSReturn {
   const [ttsEngine, setTtsEngine] = useState<string>('local')
   const ttsEngineRef = useRef(ttsEngine)
 
+  const pendingPlayResolveRef = useRef<(() => void) | null>(null)
+
   const streamTextRef = useRef('')
   const streamSynthesizedRef = useRef(0)
   const streamIsFinalRef = useRef(false)
@@ -88,19 +90,27 @@ export function useTTS(): UseTTSReturn {
   }, [])
 
   useEffect(() => {
-    sidecarFetch('/api/voice/settings')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.tts_engine) {
-          setTtsEngine(data.tts_engine)
-          ttsEngineRef.current = data.tts_engine
-        }
-      })
-      .catch(() => {})
+    const fetchEngine = () => {
+      sidecarFetch('/api/voice/settings')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.tts_engine) {
+            setTtsEngine(data.tts_engine)
+            ttsEngineRef.current = data.tts_engine
+          }
+        })
+        .catch(() => {})
+    }
+    fetchEngine()
+    window.addEventListener('ganesh:voice-settings-changed', fetchEngine)
+    return () => window.removeEventListener('ganesh:voice-settings-changed', fetchEngine)
   }, [])
 
   const playBlob = useCallback(async (blob: Blob): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
+      if (pendingPlayResolveRef.current) {
+        pendingPlayResolveRef.current()
+      }
       const url = URL.createObjectURL(blob)
       const audio = audioRef.current ?? new Audio()
       audioRef.current = audio
@@ -111,15 +121,19 @@ export function useTTS(): UseTTSReturn {
         void applySinkId(audio, outputDeviceIdRef.current)
       }
 
-      audio.onended = () => {
+      const resolvePlayback = () => {
         URL.revokeObjectURL(url)
+        pendingPlayResolveRef.current = null
         resolve()
       }
+      audio.onended = resolvePlayback
       audio.onerror = () => {
         URL.revokeObjectURL(url)
+        pendingPlayResolveRef.current = null
         reject(new Error('playback error'))
       }
 
+      pendingPlayResolveRef.current = resolvePlayback
       setIsSpeaking(true)
       audio.play().catch(reject)
     })
@@ -245,6 +259,9 @@ export function useTTS(): UseTTSReturn {
 
   const resetStream = useCallback((): void => {
     stopGenerationRef.current++
+    if (pendingPlayResolveRef.current) {
+      pendingPlayResolveRef.current()
+    }
     streamTextRef.current = ''
     streamSynthesizedRef.current = 0
     streamIsFinalRef.current = false
@@ -298,6 +315,9 @@ export function useTTS(): UseTTSReturn {
 
   const stop = useCallback((): void => {
     stopGenerationRef.current++
+    if (pendingPlayResolveRef.current) {
+      pendingPlayResolveRef.current()
+    }
     audioRef.current?.pause()
     audioRef.current = null
     playbackQueueRef.current = []

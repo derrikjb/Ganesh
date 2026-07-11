@@ -195,6 +195,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
     try {
       const updated = await saveVoiceSettings({ tts_engine: engine })
       setSettings(updated)
+      window.dispatchEvent(new CustomEvent('ganesh:voice-settings-changed'))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
