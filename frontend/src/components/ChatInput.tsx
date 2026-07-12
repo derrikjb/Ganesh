@@ -168,18 +168,19 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      const keyMatches = e.key === expectedKey || e.key === keyName
-      const modMatches =
-        e.ctrlKey === needsCtrl &&
-        e.shiftKey === needsShift &&
-        e.altKey === needsAlt &&
-        e.metaKey === needsMeta
-      if (!keyMatches && !modMatches) {
-        if (pttActiveRef.current) {
-          pttActiveRef.current = false
-          if (import.meta.env.DEV) console.log('[PTT] DOM keyup, stopping recording')
-          void stop()
-        }
+      if (!pttActiveRef.current) return
+
+      const keyReleased = e.key === expectedKey || e.key === keyName
+      const modReleased =
+        (needsCtrl && !e.ctrlKey) ||
+        (needsShift && !e.shiftKey) ||
+        (needsAlt && !e.altKey) ||
+        (needsMeta && !e.metaKey)
+
+      if (keyReleased || modReleased) {
+        pttActiveRef.current = false
+        if (import.meta.env.DEV) console.log('[PTT] DOM keyup, stopping recording')
+        void stop()
       }
     }
 

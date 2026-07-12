@@ -66,6 +66,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const capturingRef = useRef(false)
   const capturedRef = useRef<string | null>(null)
   const heldModifierRef = useRef<string | null>(null)
+  const savedHotkeyRef = useRef('Control+Space')
   const [sttEngine, setSttEngine] = useState<'local' | 'cloud'>('local')
   const [ttsEngine, setTtsEngine] = useState<'local' | 'cloud'>('local')
   const [whisperModel, setWhisperModel] = useState('tiny')
@@ -133,24 +134,28 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
   const handleHotkeyRelease = useCallback(() => {
     if (!capturingRef.current) return
     const combo = capturedRef.current
-    if (combo && combo !== pttHotkey) {
-      setCapturing(false)
-      capturingRef.current = false
-      heldModifierRef.current = null
+    setCapturing(false)
+    capturingRef.current = false
+    heldModifierRef.current = null
+    if (combo && combo !== savedHotkeyRef.current) {
       void (async () => {
         setPttHotkeySaving(true)
         try {
           const result = await invoke<string>('set_ptt_hotkey', { hotkey: combo })
           setPttHotkey(result)
+          savedHotkeyRef.current = result
           window.dispatchEvent(new CustomEvent('ganesh:ptt-hotkey-changed', { detail: result }))
         } catch {
           setError('Failed to set hotkey. Use a valid combination.')
+          setPttHotkey(savedHotkeyRef.current)
         } finally {
           setPttHotkeySaving(false)
         }
       })()
+    } else if (combo) {
+      setPttHotkey(savedHotkeyRef.current)
     }
-  }, [pttHotkey])
+  }, [])
 
   const startCapture = useCallback(() => {
     setCapturing(true)
@@ -180,7 +185,10 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
 
   useEffect(() => {
     void loadSettings()
-    invoke<string>('get_ptt_hotkey').then(setPttHotkey).catch(() => {})
+    invoke<string>('get_ptt_hotkey').then((hk) => {
+      setPttHotkey(hk)
+      savedHotkeyRef.current = hk
+    }).catch(() => {})
     void fetchDevices()
   }, [loadSettings])
 
