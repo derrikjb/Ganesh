@@ -41,7 +41,10 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     sidecarFetch('/api/voice/settings')
       .then((res) => res.json())
       .then((data) => {
-        if (data.activation_mode) setActivationMode(data.activation_mode)
+        if (data.activation_mode) {
+          setActivationMode(data.activation_mode)
+          if (import.meta.env.DEV) console.log('[PTT] activation mode:', data.activation_mode)
+        }
       })
       .catch(() => {})
   }, [])
@@ -55,25 +58,53 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     return () => window.removeEventListener('ganesh:activation-mode-changed', handler)
   }, [])
 
+  const pttActiveRef = useRef(false)
+
   useEffect(() => {
-    const unlisteners: (() => void)[] = []
-    let started = false
+    if (activationMode !== 'push_to_talk') {
+      if (import.meta.env.DEV) console.log('[PTT] skipping listener setup, mode is:', activationMode)
+      return
+    }
+
+    let pressUnlisten: (() => void) | null = null
+    let releaseUnlisten: (() => void) | null = null
+    let cancelled = false
+
+    if (import.meta.env.DEV) console.log('[PTT] setting up listeners for push_to_talk')
 
     listen('ganesh:ptt-press', () => {
-      if (!started && activationMode === 'push_to_talk' && !isTranscribing) {
-        started = true
+      if (import.meta.env.DEV) console.log('[PTT] press event received, active:', pttActiveRef.current)
+      if (!pttActiveRef.current && !isTranscribing) {
+        pttActiveRef.current = true
         void start()
       }
-    }).then((fn) => unlisteners.push(fn)).catch(() => {})
+    }).then((fn) => {
+      if (cancelled) { fn(); return }
+      pressUnlisten = fn
+      if (import.meta.env.DEV) console.log('[PTT] press listener ready')
+    }).catch((err) => {
+      if (import.meta.env.DEV) console.error('[PTT] failed to listen for press:', err)
+    })
 
     listen('ganesh:ptt-release', () => {
-      if (started) {
-        started = false
+      if (import.meta.env.DEV) console.log('[PTT] release event received, active:', pttActiveRef.current)
+      if (pttActiveRef.current) {
+        pttActiveRef.current = false
         void stop()
       }
-    }).then((fn) => unlisteners.push(fn)).catch(() => {})
+    }).then((fn) => {
+      if (cancelled) { fn(); return }
+      releaseUnlisten = fn
+      if (import.meta.env.DEV) console.log('[PTT] release listener ready')
+    }).catch((err) => {
+      if (import.meta.env.DEV) console.error('[PTT] failed to listen for release:', err)
+    })
 
-    return () => { unlisteners.forEach((fn) => fn()) }
+    return () => {
+      cancelled = true
+      pressUnlisten?.()
+      releaseUnlisten?.()
+    }
   }, [activationMode, isTranscribing, start, stop])
 
   const handleFileSelect = useCallback((fileList: FileList) => {

@@ -78,8 +78,10 @@ fn set_ptt_hotkey(
     global
         .on_shortcut(hotkey.as_str(), move |app, _shortcut, event| {
             if event.state() == ShortcutState::Pressed {
+                eprintln!("[PTT] hotkey pressed, emitting ganesh:ptt-press");
                 let _ = app.emit("ganesh:ptt-press", ());
             } else {
+                eprintln!("[PTT] hotkey released, emitting ganesh:ptt-release");
                 let _ = app.emit("ganesh:ptt-release", ());
             }
         })
@@ -197,8 +199,10 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
             let ptt_hotkey = ptt_state.hotkey.lock().unwrap().clone();
             global.on_shortcut(ptt_hotkey.as_str(), move |app, _shortcut, event| {
                 if event.state() == ShortcutState::Pressed {
+                    eprintln!("[PTT] hotkey pressed (startup), emitting ganesh:ptt-press");
                     let _ = app.emit("ganesh:ptt-press", ());
                 } else {
+                    eprintln!("[PTT] hotkey released (startup), emitting ganesh:ptt-release");
                     let _ = app.emit("ganesh:ptt-release", ());
                 }
             })?;
