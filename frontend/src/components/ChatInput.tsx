@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { sidecarFetch } from '../api'
 import { useAccessibility } from '../contexts/AccessibilityContext'
@@ -21,6 +22,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [justSent, setJustSent] = useState(false)
   const [activationMode, setActivationMode] = useState<ActivationMode>('click_to_talk')
+  const [pttHotkey, setPttHotkey] = useState('Control+Space')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { isRecording, isTranscribing, transcript, error, start, stop, resetTranscript } =
@@ -50,12 +52,29 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   }, [])
 
   useEffect(() => {
+    invoke<string>('get_ptt_hotkey').then((hk) => {
+      setPttHotkey(hk)
+      if (import.meta.env.DEV) console.log('[PTT] hotkey from Tauri:', hk)
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     const handler = (e: Event) => {
       const mode = (e as CustomEvent<ActivationMode>).detail
       if (mode) setActivationMode(mode)
     }
     window.addEventListener('ganesh:activation-mode-changed', handler)
-    return () => window.removeEventListener('ganesh:activation-mode-changed', handler)
+
+    const hotkeyHandler = (e: Event) => {
+      const hk = (e as CustomEvent<string>).detail
+      if (hk) setPttHotkey(hk)
+    }
+    window.addEventListener('ganesh:ptt-hotkey-changed', hotkeyHandler)
+
+    return () => {
+      window.removeEventListener('ganesh:activation-mode-changed', handler)
+      window.removeEventListener('ganesh:ptt-hotkey-changed', hotkeyHandler)
+    }
   }, [])
 
   const pttActiveRef = useRef(false)
@@ -106,6 +125,73 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
       releaseUnlisten?.()
     }
   }, [activationMode, isTranscribing, start, stop])
+
+  useEffect(() => {
+    if (activationMode !== 'push_to_talk') return
+
+    const parts = pttHotkey.split('+')
+    const modNames = parts.slice(0, -1)
+    const keyName = parts[parts.length - 1]
+    const needsCtrl = modNames.includes('Control')
+    const needsShift = modNames.includes('Shift')
+    const needsAlt = modNames.includes('Alt')
+    const needsMeta = modNames.includes('Super')
+
+    const KEY_MAP: Record<string, string> = {
+      Space: ' ', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown',
+      ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight',
+    }
+
+    const expectedKey = KEY_MAP[keyName] ?? keyName
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return
+      const keyMatches = e.key === expectedKey || e.key === keyName
+      const modMatches =
+        e.ctrlKey === needsCtrl &&
+        e.shiftKey === needsShift &&
+        e.altKey === needsAlt &&
+        e.metaKey === needsMeta
+      if (!keyMatches || !modMatches) return
+
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        if (target.id === 'chat-input') return
+      }
+
+      e.preventDefault()
+      if (!pttActiveRef.current && !isTranscribing) {
+        pttActiveRef.current = true
+        if (import.meta.env.DEV) console.log('[PTT] DOM keydown matched, starting recording')
+        void start()
+      }
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const keyMatches = e.key === expectedKey || e.key === keyName
+      const modMatches =
+        e.ctrlKey === needsCtrl &&
+        e.shiftKey === needsShift &&
+        e.altKey === needsAlt &&
+        e.metaKey === needsMeta
+      if (!keyMatches && !modMatches) {
+        if (pttActiveRef.current) {
+          pttActiveRef.current = false
+          if (import.meta.env.DEV) console.log('[PTT] DOM keyup, stopping recording')
+          void stop()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    if (import.meta.env.DEV) console.log('[PTT] DOM fallback listeners ready for:', pttHotkey)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [activationMode, pttHotkey, isTranscribing, start, stop])
 
   const handleFileSelect = useCallback((fileList: FileList) => {
     const files: AttachedFile[] = []

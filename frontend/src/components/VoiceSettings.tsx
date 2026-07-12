@@ -142,6 +142,7 @@ export function VoiceSettings({ onClose }: VoiceSettingsProps) {
         try {
           const result = await invoke<string>('set_ptt_hotkey', { hotkey: combo })
           setPttHotkey(result)
+          window.dispatchEvent(new CustomEvent('ganesh:ptt-hotkey-changed', { detail: result }))
         } catch {
           setError('Failed to set hotkey. Use a valid combination.')
         } finally {
